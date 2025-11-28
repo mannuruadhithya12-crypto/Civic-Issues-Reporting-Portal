@@ -30,12 +30,9 @@ function Home() {
         </div>
       </div>
 
-      <div style={{
+      <div className="glass-card" style={{
         marginTop: '3rem',
         padding: '1.5rem',
-        background: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: '12px',
-        border: '1px solid rgba(255, 255, 255, 0.1)'
       }}>
         <h4 style={{ marginBottom: '1rem', color: 'var(--theme-text-dark)' }}>
           📱 How to Report an Issue
