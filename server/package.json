@@ -7,11 +7,17 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@tensorflow/tfjs": "^4.22.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
+    "csv-parser": "^3.2.1",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "ml-matrix": "^6.15.0",
+    "ml-random-forest": "^2.1.0",
+    "mongodb-memory-server": "^11.3.0",
     "mongoose": "^9.0.0",
     "multer": "^2.0.2",
     "nedb-promises": "^6.2.3",

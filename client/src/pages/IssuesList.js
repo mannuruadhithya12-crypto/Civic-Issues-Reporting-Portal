@@ -1,338 +1,579 @@
-import React, { useEffect, useState, useContext, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import React, { useEffect, useState, useContext } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import api from "../services/api";
 import { AuthContext } from "../context/AuthContext";
-import { CATEGORIES, CATEGORY_ICONS } from "../components/CategoryCard";
+import '../styles/citizen.css';
+
+// SVG Category Icons Helper
+const CategoryIcon = ({ category }) => {
+  const cat = (category || '').toLowerCase();
+  if (cat.includes('road') || cat.includes('pothole')) {
+    return (
+      <svg width="14" height="14" fill="none" stroke="#475569" viewBox="0 0 24 24" strokeWidth="2">
+        <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+    );
+  }
+  if (cat.includes('garbage') || cat.includes('waste')) {
+    return (
+      <svg width="14" height="14" fill="none" stroke="#16a34a" viewBox="0 0 24 24" strokeWidth="2">
+        <polyline points="3 6 5 6 21 6" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </svg>
+    );
+  }
+  if (cat.includes('street') || cat.includes('light') || cat.includes('electric')) {
+    return (
+      <svg width="14" height="14" fill="none" stroke="#f59e0b" viewBox="0 0 24 24" strokeWidth="2">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      </svg>
+    );
+  }
+  if (cat.includes('water') || cat.includes('drain') || cat.includes('leak')) {
+    return (
+      <svg width="14" height="14" fill="none" stroke="#2563eb" viewBox="0 0 24 24" strokeWidth="2">
+        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+      </svg>
+    );
+  }
+  if (cat.includes('park') || cat.includes('tree') || cat.includes('green')) {
+    return (
+      <svg width="14" height="14" fill="none" stroke="#16a34a" viewBox="0 0 24 24" strokeWidth="2">
+        <path d="M17 20h5v-2a3 3 0 0 0-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 0 1 9.288 0" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="14" height="14" fill="none" stroke="#9333ea" viewBox="0 0 24 24" strokeWidth="2">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+};
+
+// Formatting Issue Code (#CC-YYYY-XXXXX)
+const getIssueCode = (issue) => {
+  if (!issue) return '#CC-2024-00000';
+  const year = issue.createdAt ? new Date(issue.createdAt).getFullYear() : '2026';
+  const num = issue._id ? issue._id.substring(issue._id.length - 5).toUpperCase() : '00001';
+  return `#CC-${year}-${num}`;
+};
+
+// Relative Time Helper
+const getRelativeTime = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffDay > 30) return date.toLocaleDateString();
+  if (diffDay > 7) {
+    const weeks = Math.floor(diffDay / 7);
+    return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+  }
+  if (diffDay > 0) return `${diffDay} day${diffDay > 1 ? 's' : ''} ago`;
+  if (diffHour > 0) return `${diffHour} hour${diffHour > 1 ? 's' : ''} ago`;
+  if (diffMin > 0) return `${diffMin} min${diffMin > 1 ? 's' : ''} ago`;
+  return 'Just now';
+};
+
+const formatStatus = (status) => {
+  const s = (status || 'reported').toLowerCase();
+  if (s === 'in_progress' || s === 'in-progress') return 'In Progress';
+  if (s === 'under_review' || s === 'verified') return 'Under Review';
+  if (s === 'reported') return 'Reported';
+  if (s === 'resolved') return 'Resolved';
+  if (s === 'closed') return 'Closed';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+const getStatusClass = (status) => {
+  const s = (status || 'reported').toLowerCase();
+  if (s === 'in_progress' || s === 'in-progress' || s === 'assigned') return 'in_progress';
+  if (s === 'reported') return 'reported';
+  if (s === 'resolved') return 'resolved';
+  if (s === 'under_review' || s === 'verified') return 'under_review';
+  if (s === 'closed' || s === 'rejected') return 'closed';
+  return 'reported';
+};
 
 function IssuesList() {
-  const [issues, setIssues] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedImages, setExpandedImages] = useState({});
-  const [highlightedIssue, setHighlightedIssue] = useState(null);
   const { user } = useContext(AuthContext);
-  const [searchParams] = useSearchParams();
-  const issueRefs = useRef({});
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const load = async () => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [issues, setIssues] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 1 });
+  const [summary, setSummary] = useState({ totalReported: 0, resolved: 0, inProgress: 0, underReview: 0, closed: 0 });
+
+  // Filters State
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'All Status');
+  const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') || 'All Categories');
+  const [sortOrder, setSortOrder] = useState(searchParams.get('sort') || 'Newest First');
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
+  const page = parseInt(searchParams.get('page') || '1', 10);
+
+  // Synchronize URL search params
+  const updateUrlParams = (newParams) => {
+    const updated = new URLSearchParams(searchParams);
+    Object.entries(newParams).forEach(([key, val]) => {
+      if (val && val !== 'All Status' && val !== 'All Categories' && val !== 'Newest First' && val !== '1') {
+        updated.set(key, val);
+      } else {
+        updated.delete(key);
+      }
+    });
+    setSearchParams(updated);
+  };
+
+  const fetchIssuesData = async () => {
+    if (!user) return;
     setLoading(true);
+    setError(null);
     try {
-      const res = await api.get("/issues");
-      setIssues(res.data || []);
+      // Fetch summary and paginated issues in parallel
+      const [summaryRes, issuesRes] = await Promise.all([
+        api.get('/issues/my/summary'),
+        api.get('/issues/my', {
+          params: {
+            page,
+            limit: 5,
+            search,
+            status: statusFilter,
+            category: categoryFilter,
+            sort: sortOrder
+          }
+        })
+      ]);
+
+      if (summaryRes && summaryRes.data && summaryRes.data.data) {
+        setSummary(summaryRes.data.data);
+      }
+
+      if (issuesRes && issuesRes.data) {
+        const issuesData = issuesRes.data.issues || issuesRes.data.data || (Array.isArray(issuesRes.data) ? issuesRes.data : []);
+        setIssues(issuesData);
+        if (issuesRes.data.pagination) {
+          setPagination(issuesRes.data.pagination);
+        } else {
+          setPagination({ page, limit: 5, total: issuesData.length, totalPages: Math.ceil(issuesData.length / 5) || 1 });
+        }
+      }
     } catch (err) {
-      console.error(err);
-      alert("Could not load issues. Check backend.");
+      console.error("Error fetching My Issues:", err);
+      setError("Unable to load your issues.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line
-  }, []);
+    fetchIssuesData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, page, search, statusFilter, categoryFilter, sortOrder]);
 
-  // Handle highlight from URL parameter
-  useEffect(() => {
-    const highlightId = searchParams.get('highlight');
-    if (highlightId && issues.length > 0) {
-      setHighlightedIssue(highlightId);
-
-      // Scroll to the issue after a short delay
-      setTimeout(() => {
-        const element = issueRefs.current[highlightId];
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 300);
-
-      // Remove highlight after 5 seconds
-      setTimeout(() => {
-        setHighlightedIssue(null);
-      }, 5000);
-    }
-  }, [searchParams, issues]);
-
-  const handleStatusUpdate = async (id, newStatus) => {
-    try {
-      await api.put(`/issues/${id}`, { status: newStatus });
-      load(); // Reload to see changes
-    } catch (err) {
-      alert("Failed to update status");
-    }
-  };
-
-  const toggleImage = (issueId, imageUrl) => {
-    setExpandedImages(prev => {
-      if (prev[issueId] === imageUrl) {
-        // Close if clicking the same image
-        const newState = { ...prev };
-        delete newState[issueId];
-        return newState;
-      }
-      return { ...prev, [issueId]: imageUrl };
-    });
-  };
-
-  const getStatusClass = (status) => {
-    return `status-badge ${status}`;
-  };
-
-
-
-  // Group issues by category
-  const groupedIssues = issues.reduce((acc, issue) => {
-    const dept = issue.department || 'Other';
-    if (!acc[dept]) acc[dept] = [];
-    acc[dept].push(issue);
-    return acc;
-  }, {});
-
-  // Render a single issue card
-  const renderIssueCard = (issue) => {
-    const isHighlighted = highlightedIssue === (issue.id || issue._id);
-    const isUrgent = issue.priority === 'urgent';
-
+  if (!user) {
     return (
-      <div
-        key={issue.id || issue._id}
-        ref={(el) => issueRefs.current[issue._id] = el}
-        className="issue-card"
-        style={{
-          border: isHighlighted ? '3px solid #2196F3' : isUrgent ? '2px solid #f44336' : undefined,
-          borderLeft: isUrgent ? '6px solid #f44336' : undefined,
-          background: isUrgent ? 'rgba(244, 67, 54, 0.03)' : undefined,
-          boxShadow: isHighlighted ? '0 8px 24px rgba(33, 150, 243, 0.3)' : isUrgent ? '0 4px 12px rgba(244, 67, 54, 0.15)' : undefined,
-          transition: 'all 0.3s ease',
-          animation: isHighlighted ? 'pulse 1s ease-in-out 3' : undefined,
-          marginBottom: '1rem'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-          <h3>
-            {isUrgent && <span style={{ marginRight: '0.5rem' }}>🚨</span>}
-            {issue.title}
-          </h3>
-          {isUrgent && (
-            <span style={{
-              background: '#f44336',
-              color: 'white',
-              padding: '0.25rem 0.75rem',
-              borderRadius: '12px',
-              fontSize: '0.75rem',
-              fontWeight: 'bold',
-              letterSpacing: '0.5px',
-              boxShadow: '0 2px 4px rgba(244, 67, 54, 0.3)'
-            }}>
-              URGENT
-            </span>
-          )}
-        </div>
-
-        <div className="issue-meta">
-          {new Date(issue.createdAt).toLocaleString()}
-          {issue.createdBy && <span> • Reported by: {issue.createdBy.username}</span>}
-        </div>
-
-
-
-        {/* Category Badge */}
-        {issue.department && (
-          <div style={{ marginTop: '0.5rem' }}>
-            <span style={{
-              display: 'inline-block',
-              padding: '0.25rem 0.75rem',
-              background: 'rgba(33, 150, 243, 0.1)',
-              color: '#2196F3',
-              borderRadius: '20px',
-              fontSize: '0.875rem',
-              fontWeight: 600
-            }}>
-              {CATEGORY_ICONS[issue.department] || '📋'} {issue.department}
-            </span>
-          </div>
-        )}
-
-        <p style={{ marginTop: 8 }}>{issue.description}</p>
-
-        {/* Location Information */}
-        <div className="issue-meta" style={{ marginTop: '0.75rem' }}>
-          <strong>📍 Location:</strong> {issue.locationName || issue.location || "Not provided"}
-        </div>
-        {issue.coordinates && issue.coordinates.latitude && (
-          <div className="issue-meta">
-            <strong>Coordinates:</strong> {issue.coordinates.latitude.toFixed(6)}, {issue.coordinates.longitude.toFixed(6)}
-          </div>
-        )}
-
-        {/* Status Badge */}
-        <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <span className={getStatusClass(issue.status || 'open')}>
-            {issue.status || 'open'}
-          </span>
-
-          {/* Share Button */}
-          <button
-            onClick={() => {
-              const shareData = {
-                title: issue.title,
-                text: `${issue.title}\n${issue.description}`,
-                url: window.location.origin + `/issues?id=${issue._id}`
-              };
-
-              if (navigator.share) {
-                navigator.share(shareData).catch(console.error);
-              } else {
-                // Fallback: Copy link to clipboard
-                navigator.clipboard.writeText(shareData.url).then(() => {
-                  alert('Link copied to clipboard!');
-                }).catch(console.error);
-              }
-            }}
-            style={{
-              padding: '0.4rem 0.75rem',
-              background: 'rgba(33, 150, 243, 0.1)',
-              color: '#2196F3',
-              border: '1px solid rgba(33, 150, 243, 0.3)',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem'
-            }}
-          >
-            📤 Share
-          </button>
-        </div>
-
-        {/* Image Gallery */}
-        {issue.images && issue.images.length > 0 && (
-          <>
-            <div className="image-gallery">
-              {issue.images.map((image, index) => (
-                <img
-                  key={index}
-                  src={`http://localhost:5000${image}`}
-                  alt={`Issue ${index + 1}`}
-                  onClick={() => toggleImage(issue._id, `http://localhost:5000${image}`)}
-                  title="Click to expand"
-                  style={{
-                    width: '100px',
-                    height: '100px',
-                    objectFit: 'cover',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    border: expandedImages[issue._id] === `http://localhost:5000${image}` ? '3px solid var(--primary)' : '2px solid transparent'
-                  }}
-                />
-              ))}
-            </div>
-
-            {/* Expanded Image Inline */}
-            {expandedImages[issue._id] && (
-              <div style={{ marginTop: '1rem', position: 'relative', animation: 'fadeIn 0.3s ease' }}>
-                <img
-                  src={expandedImages[issue._id]}
-                  alt="Expanded view"
-                  style={{
-                    width: '100%',
-                    maxHeight: '500px',
-                    objectFit: 'contain',
-                    borderRadius: '8px',
-                    boxShadow: 'var(--shadow-lg)',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => toggleImage(issue._id, expandedImages[issue._id])}
-                />
-                <p style={{ textAlign: 'center', color: 'var(--text-light)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                  Click image to close
-                </p>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Admin Controls */}
-        {user && user.role === 'admin' && (
-          <div style={{ marginTop: 10 }}>
-            <label style={{ fontWeight: 600, marginRight: '0.5rem' }}>Update Status: </label>
-            <select
-              value={issue.status}
-              onChange={(e) => handleStatusUpdate(issue._id, e.target.value)}
-              style={{ padding: '0.5rem', borderRadius: '6px', border: '2px solid var(--border)' }}
-            >
-              <option value="open">Open</option>
-              <option value="in-progress">In Progress</option>
-              <option value="resolved">Resolved</option>
-            </select>
-          </div>
-        )}
+      <div style={{ background: 'white', borderRadius: '20px', padding: '48px', textAlign: 'center', border: '1px solid #e2e8f0', marginTop: '24px' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '12px' }}>Please Log In</h2>
+        <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>Log in to view and track your reported civic issues.</p>
+        <button onClick={() => navigate('/login')} className="btn-report-new">Go to Login</button>
       </div>
     );
-  };
+  }
+
+  // Calculate percentages for summary cards
+  const total = summary.totalReported || 1;
+  const percentResolved = summary.totalReported > 0 ? Math.round((summary.resolved / total) * 100) : 0;
+  const percentInProgress = summary.totalReported > 0 ? Math.round((summary.inProgress / total) * 100) : 0;
+  const percentUnderReview = summary.totalReported > 0 ? Math.round((summary.underReview / total) * 100) : 0;
+  const percentClosed = summary.totalReported > 0 ? Math.round((summary.closed / total) * 100) : 0;
+
+  const startItem = (pagination.page - 1) * pagination.limit + (pagination.total > 0 ? 1 : 0);
+  const endItem = Math.min(pagination.page * pagination.limit, pagination.total);
 
   return (
-    <div className="container">
-      <h2>Reported Issues</h2>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      
+      {/* PAGE HEADER */}
+      <div className="my-issues-header">
+        <div className="my-issues-title-group">
+          <h1>My Issues</h1>
+          <p>Track and manage the issues you have reported. Stay updated on their progress.</p>
+        </div>
+        <button className="btn-report-new" onClick={() => navigate('/submit')}>
+          <span style={{ fontSize: '16px' }}>＋</span> Report a New Issue
+        </button>
+      </div>
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : issues.length === 0 ? (
-        <p>No issues reported yet.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          {CATEGORIES.map(category => {
-            const categoryIssues = groupedIssues[category];
-            if (!categoryIssues || categoryIssues.length === 0) return null;
-
-            return (
-              <div key={category} className="category-section">
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  marginBottom: '1rem',
-                  paddingBottom: '0.5rem',
-                  borderBottom: '2px solid var(--border)'
-                }}>
-                  <span style={{ fontSize: '1.5rem' }}>{CATEGORY_ICONS[category]}</span>
-                  <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>
-                    {category}
-                    <span style={{
-                      marginLeft: '0.75rem',
-                      fontSize: '0.9rem',
-                      background: 'var(--bg-secondary)',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '12px',
-                      color: 'var(--text-secondary)'
-                    }}>
-                      {categoryIssues.length}
-                    </span>
-                  </h3>
-                </div>
-                <div className="issues-grid">
-                  {categoryIssues.map(issue => renderIssueCard(issue))}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Handle issues with unknown categories if any */}
-          {groupedIssues['Other'] && !CATEGORIES.includes('Other') && (
-            <div className="category-section">
-              <h3>Other ({groupedIssues['Other'].length})</h3>
-              <div className="issues-grid">
-                {groupedIssues['Other'].map(issue => renderIssueCard(issue))}
-              </div>
-            </div>
-          )}
+      {/* ERROR STATE */}
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 16px', borderRadius: '14px', fontSize: '13px', color: '#991b1b', display: 'flex', justifyContext: 'space-between', alignItems: 'center' }}>
+          <span>⚠️ {error}</span>
+          <button onClick={fetchIssuesData} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>Retry</button>
         </div>
       )}
 
-      <div style={{ marginTop: 14 }}>
-        <button onClick={load}>Refresh</button>
+      {/* 5 SUMMARY CARDS */}
+      <div className="my-issues-summary-row">
+        
+        {/* 1. Total Reported */}
+        <div className="my-issues-summary-card">
+          <div className="summary-card-icon blue">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+          </div>
+          <div className="summary-card-details">
+            <span className="summary-card-val">{loading ? '...' : error ? '—' : summary.totalReported}</span>
+            <span className="summary-card-title">Total Reported</span>
+            <span className="summary-card-sub">{error ? 'Unavailable' : 'All time'}</span>
+          </div>
+        </div>
+
+        {/* 2. Resolved */}
+        <div className="my-issues-summary-card">
+          <div className="summary-card-icon green">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+          </div>
+          <div className="summary-card-details">
+            <span className="summary-card-val">{loading ? '...' : error ? '—' : summary.resolved}</span>
+            <span className="summary-card-title">Resolved</span>
+            <span className="summary-card-sub">{error ? 'Unavailable' : summary.totalReported > 0 ? `${percentResolved}% resolved` : '0% resolved'}</span>
+          </div>
+        </div>
+
+        {/* 3. In Progress */}
+        <div className="my-issues-summary-card">
+          <div className="summary-card-icon orange">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </div>
+          <div className="summary-card-details">
+            <span className="summary-card-val">{loading ? '...' : error ? '—' : summary.inProgress}</span>
+            <span className="summary-card-title">In Progress</span>
+            <span className="summary-card-sub">{error ? 'Unavailable' : summary.totalReported > 0 ? `${percentInProgress}% in progress` : '0% in progress'}</span>
+          </div>
+        </div>
+
+        {/* 4. Under Review */}
+        <div className="my-issues-summary-card">
+          <div className="summary-card-icon purple">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </div>
+          <div className="summary-card-details">
+            <span className="summary-card-val">{loading ? '...' : error ? '—' : summary.underReview}</span>
+            <span className="summary-card-title">Under Review</span>
+            <span className="summary-card-sub">{error ? 'Unavailable' : summary.totalReported > 0 ? `${percentUnderReview}% under review` : '0% under review'}</span>
+          </div>
+        </div>
+
+        {/* 5. Closed */}
+        <div className="my-issues-summary-card">
+          <div className="summary-card-icon red">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </div>
+          <div className="summary-card-details">
+            <span className="summary-card-val">{loading ? '...' : error ? '—' : summary.closed}</span>
+            <span className="summary-card-title">Closed</span>
+            <span className="summary-card-sub">{error ? 'Unavailable' : summary.totalReported > 0 ? `${percentClosed}% closed` : '0% closed'}</span>
+          </div>
+        </div>
+
       </div>
+
+      {/* SEARCH & FILTERS ROW */}
+      <div className="my-issues-filters-row">
+        
+        {/* Search Input */}
+        <div className="filter-search-box">
+          <svg className="filter-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              updateUrlParams({ search: e.target.value, page: 1 });
+            }}
+            placeholder="Search by issue title, location, or ID..."
+            className="filter-search-input"
+          />
+        </div>
+
+        {/* Filter 1: Status */}
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            updateUrlParams({ status: e.target.value, page: 1 });
+          }}
+          className="filter-select"
+        >
+          <option value="All Status">All Status</option>
+          <option value="Reported">Reported</option>
+          <option value="Under Review">Under Review</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Closed">Closed</option>
+        </select>
+
+        {/* Filter 2: Category */}
+        <select
+          value={categoryFilter}
+          onChange={(e) => {
+            setCategoryFilter(e.target.value);
+            updateUrlParams({ category: e.target.value, page: 1 });
+          }}
+          className="filter-select"
+        >
+          <option value="All Categories">All Categories</option>
+          <option value="Potholes">Potholes / Roads</option>
+          <option value="Garbage overflow">Waste / Garbage</option>
+          <option value="Streetlight failures">Streetlights</option>
+          <option value="Water leakage">Water Supply</option>
+          <option value="Parks">Parks & Trees</option>
+          <option value="Drainage issues">Drainage</option>
+        </select>
+
+        {/* Filter 3: Sort Order */}
+        <select
+          value={sortOrder}
+          onChange={(e) => {
+            setSortOrder(e.target.value);
+            updateUrlParams({ sort: e.target.value, page: 1 });
+          }}
+          className="filter-select"
+        >
+          <option value="Newest First">Newest First</option>
+          <option value="Oldest First">Oldest First</option>
+        </select>
+
+      </div>
+
+      {/* ISSUES TABLE LIST CONTAINER */}
+      <div className="my-issues-table-container">
+        
+        {loading ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+            Loading issues...
+          </div>
+        ) : error ? (
+          <div style={{ padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', background: '#fff' }}>
+            <div style={{ fontSize: '32px' }}>⚠️</div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>Unable to load your issues</div>
+            <div style={{ fontSize: '13px', color: '#64748b', maxWidth: '360px', margin: '0 auto' }}>
+              We couldn't retrieve your data right now. Please try again.
+            </div>
+            <button onClick={fetchIssuesData} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', marginTop: '8px' }}>
+              Retry
+            </button>
+          </div>
+        ) : issues.length === 0 ? (
+          <div style={{ padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+            <div style={{ fontSize: '32px' }}>📋</div>
+            <div style={{ fontSize: '15px', fontWeight: '800', color: '#0f172a' }}>No issues reported yet</div>
+            <div style={{ fontSize: '12px', color: '#64748b', maxWidth: '360px', margin: '0 auto' }}>
+              Report a civic issue in your area and track its real-time resolution progress here.
+            </div>
+            <button onClick={() => navigate('/submit')} className="btn-report-new" style={{ marginTop: '12px' }}>
+              Report Your First Issue
+            </button>
+          </div>
+        ) : (
+          <table className="my-issues-table">
+            <thead>
+              <tr>
+                <th style={{ width: '30%' }}>Issue</th>
+                <th style={{ width: '15%' }}>Status</th>
+                <th style={{ width: '15%' }}>Category</th>
+                <th style={{ width: '20%' }}>Location</th>
+                <th style={{ width: '12%' }}>Reported On</th>
+                <th style={{ width: '8%', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {issues.map((issue) => (
+                <tr key={issue._id}>
+                  
+                  {/* Issue Column (Thumbnail + Title + Code) */}
+                  <td>
+                    <div className="issue-cell-wrapper">
+                      <div className="issue-cell-thumb">
+                        {issue.images && issue.images.length > 0 ? (
+                          <img 
+                            src={issue.images[0].startsWith('http') ? issue.images[0] : `http://localhost:5000${issue.images[0].startsWith('/') ? '' : '/'}${issue.images[0]}`} 
+                            alt={issue.title} 
+                          />
+                        ) : (
+                          <CategoryIcon category={issue.department} />
+                        )}
+                      </div>
+                      <div className="issue-cell-info">
+                        <span className="issue-cell-title">{issue.title}</span>
+                        <span className="issue-cell-code">{getIssueCode(issue)}</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Status Column */}
+                  <td>
+                    <span className={`status-pill ${getStatusClass(issue.status)}`}>
+                      {formatStatus(issue.status)}
+                    </span>
+                  </td>
+
+                  {/* Category Column */}
+                  <td>
+                    <div className="cell-category">
+                      <CategoryIcon category={issue.department} />
+                      <span>{issue.department || 'General'}</span>
+                    </div>
+                  </td>
+
+                  {/* Location Column */}
+                  <td>
+                    <div className="cell-location">
+                      <svg width="12" height="12" fill="none" stroke="#94a3b8" viewBox="0 0 24 24" strokeWidth="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>
+                        {issue.locationName || issue.location || 'Municipal Area'}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* Reported On Column */}
+                  <td>
+                    <div className="cell-date">
+                      <span className="cell-date-main">
+                        {new Date(issue.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                      <span className="cell-date-sub">{getRelativeTime(issue.createdAt)}</span>
+                    </div>
+                  </td>
+
+                  {/* Actions Column */}
+                  <td style={{ textAlign: 'right' }}>
+                    <div className="actions-cell" style={{ justifyContent: 'flex-end' }}>
+                      <button 
+                        className="btn-view-details"
+                        onClick={() => navigate(`/issues/${issue._id}`)}
+                      >
+                        View Details
+                      </button>
+
+                      <button 
+                        className="btn-action-dots"
+                        onClick={() => setActiveMenuId(activeMenuId === issue._id ? null : issue._id)}
+                      >
+                        ⋮
+                      </button>
+
+                      {activeMenuId === issue._id && (
+                        <div className="action-menu-dropdown">
+                          <div 
+                            className="action-menu-item"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              navigate(`/issues/${issue._id}`);
+                            }}
+                          >
+                            👁️ View Details
+                          </div>
+                          <div 
+                            className="action-menu-item"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              navigate(`/issues/${issue._id}`);
+                            }}
+                          >
+                            📈 Track Issue
+                          </div>
+                          <div 
+                            className="action-menu-item"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              navigate(`/map?highlight=${issue._id}`);
+                            }}
+                          >
+                            🗺️ Open on Map
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+      </div>
+
+      {/* PAGINATION ROW */}
+      <div className="my-issues-pagination-row">
+        <div className="pagination-info">
+          Showing {startItem}–{endItem} of {pagination.total} issues
+        </div>
+
+        <div className="pagination-controls">
+          <button 
+            className="page-btn"
+            disabled={pagination.page <= 1}
+            onClick={() => updateUrlParams({ page: pagination.page - 1 })}
+          >
+            ‹
+          </button>
+
+          {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
+            <button
+              key={p}
+              className={`page-btn ${p === pagination.page ? 'active' : ''}`}
+              onClick={() => updateUrlParams({ page: p })}
+            >
+              {p}
+            </button>
+          ))}
+
+          <button 
+            className="page-btn"
+            disabled={pagination.page >= pagination.totalPages}
+            onClick={() => updateUrlParams({ page: pagination.page + 1 })}
+          >
+            ›
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }

@@ -1,0 +1,57 @@
+{
+  "status": "LOW_CONFIDENCE",
+  "modelVersion": "1.0.0",
+  "trainedAt": "2026-10-09T02:10:39.287Z",
+  "trainingStart": "2026-09-11T02:10:33.801Z",
+  "trainingEnd": "2026-09-25T02:10:33.801Z",
+  "testStart": "2026-09-25T02:10:33.801Z",
+  "testEnd": "2026-09-25T02:10:33.801Z",
+  "trainingSamples": 138,
+  "testSamples": 35,
+  "positiveSamples": 5,
+  "negativeSamples": 168,
+  "featureNames": [
+    "nearbyIssueCount",
+    "nearbyCategoryCount",
+    "issuesLast7Days",
+    "issuesLast30Days",
+    "issuesLast60Days",
+    "issuesLast90Days",
+    "categoryIssuesLast7Days",
+    "categoryIssuesLast30Days",
+    "recentGrowth",
+    "highSeverityCount",
+    "criticalSeverityCount",
+    "openIssuesAtCutoff",
+    "slaBreachesBeforeCutoff",
+    "dayOfWeek",
+    "month"
+  ],
+  "targetDefinition": "Activity >= 2 issues in horizon",
+  "predictionHorizon": 7,
+  "gridSize": 250,
+  "baselineMetrics": {
+    "accuracy": 0.7429,
+    "precision": 0.1,
+    "recall": 1,
+    "f1": 0.1818,
+    "confusionMatrix": {
+      "tp": 1,
+      "tn": 25,
+      "fp": 9,
+      "fn": 0
+    }
+  },
+  "metrics": {
+    "accuracy": 0.9714,
+    "precision": 0,
+    "recall": 0,
+    "f1": 0,
+    "confusionMatrix": {
+      "tp": 0,
+      "tn": 34,
+      "fp": 0,
+      "fn": 1
+    }
+  }
+}

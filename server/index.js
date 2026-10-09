@@ -9,13 +9,16 @@ const multer = require("multer");
 const path = require("path");
 const NodeGeocoder = require("node-geocoder");
 
+const interventionsRoutes = require('./routes/interventions');
+
 const User = require("./models/User");
 const Issue = require("./models/Issue");
 const { auth, admin } = require("./middleware/auth");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Global logging middleware
 app.use((req, res, next) => {
@@ -59,17 +62,94 @@ const geocoder = NodeGeocoder({
 
 const PORT = process.env.PORT || 5000;
 
+const { MongoMemoryServer } = require('mongodb-memory-server');
+let mongoServer;
+
 // Connect to MongoDB with retry logic
 const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) return;
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("MongoDB connected");
+    let mongoUri = process.env.MONGO_URI;
+    
+    // Try primary MONGO_URI first, fallback to Memory Server if network/whitelist fails
+    try {
+      if (mongoUri && !process.env.FORCE_MEMORY_DB) {
+        await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 2000 });
+        console.log("MongoDB connected directly to primary URI");
+      } else {
+        throw new Error("Using Memory Server");
+      }
+    } catch (primaryErr) {
+      console.log("Primary MongoDB connection skipped or failed (" + primaryErr.message + "). Starting Memory Server...");
+      try { await mongoose.disconnect(); } catch (e) {}
+
+      if (!mongoServer) {
+        const fs = require('fs');
+        const dbPath = path.join(__dirname, 'data', 'temp_mongo_db');
+        if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath, { recursive: true });
+        
+        try {
+          mongoServer = await MongoMemoryServer.create({
+            instance: {
+              port: 27018,
+              dbPath: dbPath,
+              dbName: 'mernDB'
+            }
+          });
+          mongoUri = mongoServer.getUri();
+        } catch (memErr) {
+          try {
+            mongoServer = await MongoMemoryServer.create({
+              instance: { dbName: 'mernDB' }
+            });
+            mongoUri = mongoServer.getUri();
+          } catch (e) {
+            mongoUri = 'mongodb://127.0.0.1:27018/mernDB';
+          }
+        }
+      } else {
+        try {
+          mongoUri = mongoServer.getUri();
+        } catch (e) {
+          mongoServer = null;
+          return connectDB();
+        }
+      }
+
+      await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+      console.log("MongoDB connected via Memory Server at " + mongoUri);
+    }
+
+    // Ensure default data and admin/worker exist for local use
+    try {
+      const seedDatabase = require('./seedDatabase');
+      await seedDatabase();
+    } catch (seedErr) {
+      console.error("Seeding notice:", seedErr.message);
+    }
   } catch (err) {
     console.error("MongoDB connection error:", err.message);
-    console.log("Retrying in 5 seconds...");
-    setTimeout(connectDB, 5000);
+    if (mongoServer) {
+      try { await mongoServer.stop({ doCleanup: true }); } catch (e) {}
+      mongoServer = null;
+    }
+    console.log("Retrying in 3 seconds...");
+    setTimeout(connectDB, 3000);
   }
 };
+
+// Database auto-reconnect middleware
+app.use(async (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    console.log(`[DB Auto-Reconnect] Mongoose connection state is ${mongoose.connection.readyState}. Reconnecting...`);
+    try {
+      await connectDB();
+    } catch (err) {
+      console.error("[DB Auto-Reconnect Failed]:", err.message);
+    }
+  }
+  next();
+});
 
 connectDB();
 
@@ -79,333 +159,53 @@ app.get("/", (req, res) => {
 });
 
 // --- Auth Routes ---
+const authRoutes = require("./routes/auth");
+app.use("/api/auth", authRoutes);
 
-// Register
-app.post("/api/auth/register", async (req, res) => {
-  const { username, email, password, role = 'user' } = req.body;
-  try {
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ message: "User with this email already exists" });
+// --- User Routes ---
+const userRoutes = require("./routes/users");
+app.use("/api/users", userRoutes);
 
-    user = await User.findOne({ username });
-    if (user) return res.status(400).json({ message: "Username already taken" });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    user = new User({ username, email, password: hashedPassword, role });
-    await user.save();
-
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: "24h",
-    });
-
-    res.status(201).json({ token, user: { id: user._id, username, email, role: user.role } });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Login
-app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: "24h",
-    });
-
-    res.json({ token, user: { id: user._id, username: user.username, email: user.email, role: user.role } });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Verify User (Forgot Password)
-app.post("/api/auth/verify-user", async (req, res) => {
-  const { username } = req.body;
-  try {
-    const user = await User.findOne({ username });
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.json({ message: "User verified", exists: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Reset Password
-app.post("/api/auth/reset-password", async (req, res) => {
-  const { username, newPassword } = req.body;
-  try {
-    const user = await User.findOne({ username });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    await user.save();
-
-    res.json({ message: "Password reset successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Verify User (Forgot Password)
-app.post("/api/auth/verify-user", async (req, res) => {
-  const { username } = req.body;
-  try {
-    const user = await User.findOne({ username });
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.json({ message: "User verified", exists: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Reset Password
-app.post("/api/auth/reset-password", async (req, res) => {
-  const { username, newPassword } = req.body;
-  try {
-    const user = await User.findOne({ username });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    await user.save();
-
-    res.json({ message: "Password reset successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+// --- AI Routes ---
+const aiRoutes = require("./routes/ai");
+app.use("/api/ai", aiRoutes);
 
 // --- Issue Routes ---
+const issueRoutes = require("./routes/issues");
+app.use("/api/issues", issueRoutes);
 
-// Get user's own tickets (Protected)
-app.get("/api/issues/my-tickets", auth, async (req, res) => {
-  try {
-    const issues = await Issue.find({ createdBy: req.user.id }).sort({ createdAt: -1 });
-    res.json(issues);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+// --- Subsystem Backend Routes (Admin Core) ---
+app.use("/api/admin/intelligence", require("./routes/intelligence"));
+app.use("/api/admin/interventions", interventionsRoutes);
+app.use("/api/admin/rl", require("./routes/reinforcementLearning"));
+app.use("/api/admin/adaptive", require("./routes/adaptiveRoutes"));
+app.use("/api/admin/operations", require("./routes/operations"));
+app.use("/api/admin/dashboard", require("./routes/dashboard"));
 
-// Get all issues - sorted with urgent at top
-app.get("/api/issues", async (req, res) => {
-  try {
-    const issues = await Issue.find().populate("createdBy", "username");
+// --- Admin Routes ---
+const adminRoutes = require("./routes/admin");
+app.use("/api/admin", adminRoutes);
 
-    // Sort: urgent first, then by createdAt descending
-    const sortedIssues = issues.sort((a, b) => {
-      // Priority order: urgent > high > normal > low
-      const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 };
-      const aPriority = priorityOrder[a.priority] || 2;
-      const bPriority = priorityOrder[b.priority] || 2;
+// --- Dataset Import Routes ---
+const datasetImportRoutes = require("./routes/datasetImport");
+app.use("/api/dataset-import", datasetImportRoutes);
 
-      if (aPriority !== bPriority) {
-        return bPriority - aPriority; // Higher priority first
-      }
+// --- Worker Routes ---
+const workerRoutes = require("./routes/workers");
+app.use("/api/worker", workerRoutes);
 
-      // If same priority, sort by date (newest first)
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    });
+// --- Notification Routes ---
+const notificationRoutes = require("./routes/notifications");
+app.use("/api/notifications", notificationRoutes);
 
-    res.json(sortedIssues);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+// --- Announcement Routes ---
+const announcementRoutes = require("./routes/announcements");
+app.use("/api/announcements", announcementRoutes);
 
-// Create issue (Protected) with file upload
-app.post("/api/issues", auth, upload.array('images', 5), async (req, res) => {
-  console.log('Received issue submission:', req.body);
-  const { title, description, location, coordinates, department, priority } = req.body;
-  try {
-    let locationName = location;
-    let parsedCoordinates = coordinates ? JSON.parse(coordinates) : null;
-
-    // Reverse geocode if coordinates are provided
-    if (parsedCoordinates && parsedCoordinates.latitude && parsedCoordinates.longitude) {
-      try {
-        const results = await geocoder.reverse({
-          lat: parsedCoordinates.latitude,
-          lon: parsedCoordinates.longitude
-        });
-        if (results && results.length > 0) {
-          locationName = results[0].formattedAddress || location;
-        }
-      } catch (geoErr) {
-        console.error('Geocoding error:', geoErr);
-      }
-    }
-
-    // Calculate SLA Deadline
-    let slaHours = 24 * 7; // Default 7 days (Normal)
-    if (priority === 'urgent') slaHours = 24;
-    else if (priority === 'high') slaHours = 24 * 3;
-    else if (priority === 'low') slaHours = 24 * 14;
-
-    const slaDeadline = new Date(Date.now() + slaHours * 60 * 60 * 1000);
-
-    // Get uploaded file paths
-    const imagePaths = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
-
-    const newIssue = new Issue({
-      title,
-      description,
-      location,
-      locationName,
-      coordinates: parsedCoordinates,
-      images: imagePaths,
-      department: department || 'Other',
-      priority: priority || 'normal',
-      createdBy: req.user.id,
-      slaDeadline,
-      timeline: [{
-        who: req.user.username || 'User',
-        text: 'Issue reported',
-        status: 'submitted'
-      }]
-    });
-    const savedIssue = await newIssue.save();
-    res.status(201).json(savedIssue);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Update issue status (Admin only)
-app.put("/api/issues/:id", auth, admin, async (req, res) => {
-  const { status } = req.body;
-  try {
-    const issue = await Issue.findById(req.params.id);
-    if (!issue) return res.status(404).json({ message: "Issue not found" });
-
-    issue.status = status;
-
-    // Add to timeline
-    if (!issue.timeline) issue.timeline = [];
-    issue.timeline.push({
-      at: new Date(),
-      who: req.user.email || req.user.username,
-      text: `Status changed to ${status}`,
-      status: status
-    });
-
-    await issue.save();
-    res.json(issue);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Add comment to issue (Protected)
-app.post("/api/issues/:id/comments", auth, async (req, res) => {
-  const { text } = req.body;
-  try {
-    const issue = await Issue.findById(req.params.id);
-    if (!issue) return res.status(404).json({ message: "Issue not found" });
-
-    const comment = {
-      text,
-      by: req.user.email || req.user.username,
-      at: new Date()
-    };
-
-    if (!issue.comments) issue.comments = [];
-    issue.comments.push(comment);
-
-    await issue.save();
-    res.json(issue);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Update issue priority (Admin only)
-app.put("/api/issues/:id/priority", auth, admin, async (req, res) => {
-  const { priority } = req.body;
-  try {
-    const issue = await Issue.findById(req.params.id);
-    if (!issue) return res.status(404).json({ message: "Issue not found" });
-
-    issue.priority = priority;
-
-    // Add to timeline
-    if (!issue.timeline) issue.timeline = [];
-    issue.timeline.push({
-      at: new Date(),
-      who: req.user.email || req.user.username,
-      text: `Priority changed to ${priority}`
-    });
-
-    await issue.save();
-    res.json(issue);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Assign issue to worker (Admin only)
-app.put("/api/issues/:id/assign", auth, admin, async (req, res) => {
-  const { assignedTo } = req.body;
-  try {
-    const issue = await Issue.findById(req.params.id);
-    if (!issue) return res.status(404).json({ message: "Issue not found" });
-
-    issue.assignedTo = assignedTo;
-    issue.status = 'assigned';
-
-    // Add to timeline
-    if (!issue.timeline) issue.timeline = [];
-    issue.timeline.push({
-      at: new Date(),
-      who: req.user.email || req.user.username,
-      text: `Assigned to ${assignedTo}`
-    });
-
-    await issue.save();
-    res.json(issue);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Attach additional images to issue (Protected)
-app.post("/api/issues/:id/images", auth, upload.array('images', 5), async (req, res) => {
-  try {
-    const issue = await Issue.findById(req.params.id);
-    if (!issue) return res.status(404).json({ message: "Issue not found" });
-
-    const newImagePaths = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
-
-    if (!issue.images) issue.images = [];
-    issue.images = issue.images.concat(newImagePaths);
-
-    await issue.save();
-    res.json(issue);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+// --- Support Routes ---
+const supportRoutes = require("./routes/support");
+app.use("/api/support", supportRoutes);
 
 // Bulk update status (Admin only)
 app.put("/api/issues/bulk-update", auth, admin, async (req, res) => {
@@ -472,25 +272,12 @@ app.get("/api/issues/export", auth, admin, async (req, res) => {
 
 // Get departments list
 app.get("/api/departments", (req, res) => {
-  const departments = [
-    "Potholes",
-    "Garbage overflow",
-    "Streetlight failures",
-    "Water leakage",
-    "Illegal parking",
-    "Drainage issues",
-    "Broken footpaths",
-    "Noise pollution",
-    "Sewage problems",
-    "Public safety issues",
-    "Other"
-  ];
-  res.json(departments);
+  const { DEPARTMENTS } = require('./config/departments');
+  res.json(DEPARTMENTS);
 });
 
 // Get staff list (Admin only)
 app.get("/api/staff", auth, admin, (req, res) => {
-  // In a real application, this would fetch from a database
   const staff = [
     "worker_1",
     "worker_2",
@@ -502,162 +289,24 @@ app.get("/api/staff", auth, admin, (req, res) => {
   res.json(staff);
 });
 
-// Get notifications (recent issues)
-app.get("/api/notifications", auth, async (req, res) => {
-  try {
-    // Get issues from last 24 hours, sorted by most recent
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+// --- Legacy Alias Routes ---
+const analyticsRoutes = require("./routes/analytics");
+app.use("/api/analytics", analyticsRoutes);
 
-    const recentIssues = await Issue.find({
-      createdAt: { $gte: oneDayAgo }
-    })
-      .populate("createdBy", "username email")
-      .sort({ createdAt: -1 })
-      .limit(10);
+const decisionSupportRoutes = require("./routes/decisionSupport");
+app.use("/api/decision-support", decisionSupportRoutes);
 
-    // Format as notifications
-    const notifications = recentIssues.map(issue => ({
-      id: issue._id,
-      type: 'new_issue',
-      title: 'New Issue Reported',
-      message: `${issue.title} - ${issue.department}`,
-      issueId: issue._id,
-      issueTitle: issue.title,
-      department: issue.department,
-      createdBy: issue.createdBy?.username || 'Unknown',
-      createdAt: issue.createdAt,
-      read: false
-    }));
+const predictionsRoutes = require('./routes/predictions');
+app.use("/api/predictions", predictionsRoutes);
 
-    res.json(notifications);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+app.use("/api/interventions", interventionsRoutes);
 
-// --- Worker & Admin Routes ---
+const reinforcementLearningRoutes = require('./routes/reinforcementLearning');
+app.use("/api/reinforcement-learning", reinforcementLearningRoutes);
 
-// Create Worker (Admin only)
-app.post("/api/admin/create-worker", auth, admin, async (req, res) => {
-  const { username, email, password } = req.body;
-  try {
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ message: "User already exists" });
+const adaptiveRoutes = require('./routes/adaptiveRoutes');
+app.use("/api/adaptive-intelligence", adaptiveRoutes);
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    user = new User({ username, email, password: hashedPassword, role: 'worker' });
-    await user.save();
-
-    res.status(201).json({ message: "Worker created successfully", worker: { id: user._id, username, email } });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Get all workers (Admin only)
-app.get("/api/admin/workers", auth, admin, async (req, res) => {
-  try {
-    const workers = await User.find({ role: 'worker' }).select('-password');
-    res.json(workers);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Get assigned issues (Worker only)
-app.get("/api/worker/assigned", auth, async (req, res) => {
-  try {
-    // Find issues where assignedTo matches worker's username (since we stored username string)
-    // Ideally we should store ID, but for now we match by username string as per previous implementation
-    const issues = await Issue.find({ assignedTo: req.user.username }).sort({ createdAt: -1 });
-    res.json(issues);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Resolve issue with proof (Worker only)
-app.post("/api/issues/:id/resolve", auth, upload.single('proof'), async (req, res) => {
-  try {
-    const issue = await Issue.findById(req.params.id);
-    if (!issue) return res.status(404).json({ message: "Issue not found" });
-
-    if (issue.assignedTo !== req.user.username) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    const proofPath = req.file ? `/uploads/${req.file.filename}` : null;
-    if (!proofPath) return res.status(400).json({ message: "Proof image is required" });
-
-    issue.status = 'pending-verification';
-    issue.resolutionProof = proofPath;
-    issue.resolvedBy = req.user.id;
-
-    // Add to timeline
-    if (!issue.timeline) issue.timeline = [];
-    issue.timeline.push({
-      at: new Date(),
-      who: req.user.username,
-      text: 'Marked as resolved with proof',
-      status: 'pending-verification'
-    });
-
-    await issue.save();
-    res.json(issue);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Analytics Endpoint (Admin only)
-app.get("/api/analytics", auth, admin, async (req, res) => {
-  try {
-    const totalIssues = await Issue.countDocuments();
-    const resolvedIssues = await Issue.countDocuments({ status: 'resolved' });
-    const pendingIssues = totalIssues - resolvedIssues;
-
-    // Issues by Department
-    const issuesByDept = await Issue.aggregate([
-      { $group: { _id: "$department", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
-
-    // Issues by Status
-    const issuesByStatus = await Issue.aggregate([
-      { $group: { _id: "$status", count: { $sum: 1 } } }
-    ]);
-
-    // Recent Issues (Last 7 days)
-    const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recentTrend = await Issue.aggregate([
-      { $match: { createdAt: { $gte: last7Days } } },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
-
-    res.json({
-      totalIssues,
-      resolvedIssues,
-      pendingIssues,
-      issuesByDept,
-      issuesByStatus,
-      recentTrend
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

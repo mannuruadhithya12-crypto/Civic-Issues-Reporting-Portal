@@ -1,362 +1,506 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import api from '../services/api';
+import '../styles/login.css';
 
 const Register = () => {
-    const [username, setUsername] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [role, setRole] = useState('user');
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [role, setRole] = useState('citizen');
+    const [department, setDepartment] = useState('');
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [language, setLanguage] = useState('English');
+    
     const { register } = useContext(AuthContext);
     const navigate = useNavigate();
     const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [stats, setStats] = useState({ reported: '10K+', resolved: '8K+', active: '25K+' });
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const res = await api.get('/issues');
+                if (Array.isArray(res.data) && res.data.length > 0) {
+                    const total = res.data.length;
+                    const resolved = res.data.filter(i => i.status === 'resolved' || i.status === 'closed').length;
+                    setStats({
+                        reported: total > 10 ? `${total}+` : `${total}`,
+                        resolved: resolved > 5 ? `${resolved}+` : `${resolved}`,
+                        active: '25K+'
+                    });
+                }
+            } catch (err) {
+                // Fallback stats
+            }
+        };
+        fetchStats();
+    }, []);
+
+    // Password strength calculation
+    const getPasswordStrength = () => {
+        if (!password) return 0;
+        let score = 0;
+        if (password.length >= 8) score += 25;
+        if (password.match(/[A-Z]/)) score += 25;
+        if (password.match(/[0-9]/)) score += 25;
+        if (password.match(/[^A-Za-z0-9]/)) score += 25;
+        return score;
+    };
+
+    const strength = getPasswordStrength();
+    let strengthColor = 'bg-gray-200';
+    let strengthText = 'Weak';
+    if (strength > 25) { strengthColor = 'bg-amber-400'; strengthText = 'Fair'; }
+    if (strength > 50) { strengthColor = 'bg-blue-500'; strengthText = 'Good'; }
+    if (strength > 75) { strengthColor = 'bg-emerald-500'; strengthText = 'Strong'; }
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
+
+        if (!firstName.trim()) {
+            setError('Please enter your first name.');
+            return;
+        }
+        if (!lastName.trim()) {
+            setError('Please enter your last name.');
+            return;
+        }
+        if (!email.trim()) {
+            setError('Please enter your email address.');
+            return;
+        }
+        if (!password) {
+            setError('Please create a password.');
+            return;
+        }
+        if (password !== confirmPassword) {
+            setError('Passwords do not match.');
+            return;
+        }
+        if (!acceptedTerms) {
+            setError('Please accept the Terms of Service and Privacy Policy.');
+            return;
+        }
+        if (role === 'worker' && !department) {
+            setError('Please select your department.');
+            return;
+        }
+
+        const fullName = `${firstName.trim()} ${lastName.trim()}`;
+
+        setIsLoading(true);
         try {
-            await register(username, email, password, role);
-            navigate('/');
+            await register(fullName, email.trim(), '', password, role, department);
+            alert('Account created successfully! Please sign in with your credentials.');
+            navigate('/login');
         } catch (err) {
-            setError(err.response?.data?.message || 'Registration failed');
+            const serverMsg = err.response?.data?.message || err.response?.data?.error || err.message;
+            setError(serverMsg || 'Registration failed. Please try again.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     return (
-        <div style={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '2rem'
-        }}>
-            <div style={{
-                width: '100%',
-                maxWidth: '450px',
-                background: 'white',
-                borderRadius: '16px',
-                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
-                overflow: 'hidden'
-            }}>
-                {/* Blue Header */}
-                <div style={{
-                    background: 'linear-gradient(135deg, #2196F3, #1976D2)',
-                    padding: '2.5rem 2rem',
-                    textAlign: 'center',
-                    color: 'white'
-                }}>
-                    <h2 style={{
-                        margin: 0,
-                        fontSize: '1.75rem',
-                        fontWeight: 600,
-                        marginBottom: '0.5rem'
-                    }}>
-                        Create Account
-                    </h2>
-                    <p style={{
-                        margin: 0,
-                        fontSize: '0.95rem',
-                        opacity: 0.95
-                    }}>
-                        Join our civic community
-                    </p>
-                </div>
+        <div className="civic-login-page">
+            <div className="civic-login-container">
+                
+                {/* ================= LEFT BRAND & VISUAL PANEL ================= */}
+                <div className="login-brand-panel">
+                    
+                    {/* Top Header Logo */}
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="brand-header-logo">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                                    <polyline points="2 17 12 22 22 17" />
+                                    <polyline points="2 12 12 17 22 12" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 className="brand-title">CivicConnect</h2>
+                                <p className="brand-tagline">Cleaner Cities. Stronger Communities.</p>
+                            </div>
+                        </div>
 
-                {/* Form Container */}
-                <div style={{ padding: '2rem' }}>
-                    {/* Icon */}
-                    <div style={{
-                        textAlign: 'center',
-                        marginBottom: '1.5rem'
-                    }}>
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2196F3" strokeWidth="2">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="8.5" cy="7" r="4"></circle>
-                            <line x1="20" y1="8" x2="20" y2="14"></line>
-                            <line x1="23" y1="11" x2="17" y2="11"></line>
+                        {/* Hero Headings */}
+                        <h1 className="hero-heading">
+                            A Cleaner City<br />
+                            <span className="hero-heading-highlight">A Better Tomorrow</span>
+                        </h1>
+
+                        <p className="hero-description">
+                            Report issues. Track progress. Build a safer, cleaner and more livable community together.
+                        </p>
+
+                        {/* 3 Feature Columns */}
+                        <div className="feature-columns-grid">
+                            <div className="feature-column-card">
+                                <div className="feature-icon-wrapper bg-blue-100 text-blue-600">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                                </div>
+                                <span className="feature-title">Report</span>
+                                <span className="feature-desc">Spot an issue?<br />Take a photo and report it.</span>
+                            </div>
+
+                            <div className="feature-column-card">
+                                <div className="feature-icon-wrapper bg-emerald-100 text-emerald-600">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                </div>
+                                <span className="feature-title">Track</span>
+                                <span className="feature-desc">Follow real-time progress<br />on your reports.</span>
+                            </div>
+
+                            <div className="feature-column-card">
+                                <div className="feature-icon-wrapper bg-purple-100 text-purple-600">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                </div>
+                                <span className="feature-title">Resolve</span>
+                                <span className="feature-desc">Authorities and field workers<br />act to make a better city.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Lower City Vector Illustration & Floating Pill Card */}
+                    <div className="city-illustration-container">
+                        <svg className="city-illustration-image opacity-90" viewBox="0 0 500 160" fill="currentColor">
+                            <ellipse cx="80" cy="30" rx="30" ry="12" fill="#ffffff" opacity="0.6" />
+                            <ellipse cx="380" cy="40" rx="45" ry="16" fill="#ffffff" opacity="0.6" />
+                            <circle cx="440" cy="30" r="18" fill="#fcd34d" />
+                            <rect x="30" y="50" width="45" height="110" rx="2" fill="#1e293b" />
+                            <rect x="42" y="60" width="7" height="10" fill="#fef08a" />
+                            <rect x="58" y="60" width="7" height="10" fill="#fef08a" />
+                            <rect x="90" y="30" width="60" height="130" rx="3" fill="#334155" />
+                            <rect x="165" y="55" width="50" height="105" rx="2" fill="#0f172a" />
+                            <rect x="230" y="25" width="65" height="135" rx="3" fill="#1e293b" />
+                            <rect x="310" y="45" width="55" height="115" rx="2" fill="#334155" />
+                            <rect x="380" y="65" width="45" height="95" rx="2" fill="#1e293b" />
+                            <circle cx="20" cy="115" r="22" fill="#16a34a" />
+                            <rect x="18" y="130" width="5" height="30" fill="#78350f" />
+                            <circle cx="470" cy="110" r="25" fill="#15803d" />
+                            <rect x="467" y="128" width="6" height="32" fill="#78350f" />
                         </svg>
                     </div>
 
-                    {error && (
-                        <div style={{
-                            padding: '0.75rem',
-                            background: '#ffebee',
-                            color: '#c62828',
-                            borderRadius: '8px',
-                            marginBottom: '1rem',
-                            fontSize: '0.875rem',
-                            textAlign: 'center'
-                        }}>
-                            {error}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit}>
-                        {/* Username Field */}
-                        <div style={{ marginBottom: '1.25rem' }}>
-                            <label style={{
-                                display: 'block',
-                                marginBottom: '0.5rem',
-                                color: '#424242',
-                                fontSize: '0.875rem',
-                                fontWeight: 500
-                            }}>
-                                Username
-                            </label>
-                            <div style={{ position: 'relative' }}>
-                                <span style={{
-                                    position: 'absolute',
-                                    left: '12px',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    color: '#9e9e9e'
-                                }}>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                        <circle cx="12" cy="7" r="4"></circle>
-                                    </svg>
-                                </span>
-                                <input
-                                    type="text"
-                                    placeholder="Enter your username"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    required
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem 0.75rem 0.75rem 2.75rem',
-                                        border: '1px solid #e0e0e0',
-                                        borderRadius: '8px',
-                                        fontSize: '0.95rem',
-                                        transition: 'all 0.3s ease',
-                                        outline: 'none'
-                                    }}
-                                    onFocus={(e) => e.target.style.borderColor = '#2196F3'}
-                                    onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-                                />
+                    {/* Floating Statistics Pill */}
+                    <div className="stats-pill-card">
+                        <div className="stat-item">
+                            <div className="stat-icon-badge bg-emerald-100 text-emerald-600">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.4 19 2c1 2 2 4.1 2 7 0 6-4.5 11-10 11z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+                            </div>
+                            <div>
+                                <div className="stat-value">{stats.reported}</div>
+                                <div className="stat-label">Issues Reported</div>
                             </div>
                         </div>
 
-                        {/* Email Field */}
-                        <div style={{ marginBottom: '1.25rem' }}>
-                            <label style={{
-                                display: 'block',
-                                marginBottom: '0.5rem',
-                                color: '#424242',
-                                fontSize: '0.875rem',
-                                fontWeight: 500
-                            }}>
-                                Email Address
-                            </label>
-                            <div style={{ position: 'relative' }}>
-                                <span style={{
-                                    position: 'absolute',
-                                    left: '12px',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    color: '#9e9e9e'
-                                }}>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                                        <polyline points="22,6 12,13 2,6"></polyline>
-                                    </svg>
-                                </span>
-                                <input
-                                    type="email"
-                                    placeholder="your@email.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem 0.75rem 0.75rem 2.75rem',
-                                        border: '1px solid #e0e0e0',
-                                        borderRadius: '8px',
-                                        fontSize: '0.95rem',
-                                        transition: 'all 0.3s ease',
-                                        outline: 'none'
-                                    }}
-                                    onFocus={(e) => e.target.style.borderColor = '#2196F3'}
-                                    onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-                                />
+                        <div className="stat-divider"></div>
+
+                        <div className="stat-item">
+                            <div className="stat-icon-badge bg-blue-100 text-blue-600">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            </div>
+                            <div>
+                                <div className="stat-value">{stats.resolved}</div>
+                                <div className="stat-label">Issues Resolved</div>
                             </div>
                         </div>
 
-                        {/* Password Field */}
-                        <div style={{ marginBottom: '1.25rem' }}>
-                            <label style={{
-                                display: 'block',
-                                marginBottom: '0.5rem',
-                                color: '#424242',
-                                fontSize: '0.875rem',
-                                fontWeight: 500
-                            }}>
-                                Password
-                            </label>
-                            <div style={{ position: 'relative' }}>
-                                <span style={{
-                                    position: 'absolute',
-                                    left: '12px',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    color: '#9e9e9e'
-                                }}>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                                    </svg>
-                                </span>
-                                <input
-                                    type={showPassword ? 'text' : 'password'}
-                                    placeholder="Enter your password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem 2.75rem 0.75rem 2.75rem',
-                                        border: '1px solid #e0e0e0',
-                                        borderRadius: '8px',
-                                        fontSize: '0.95rem',
-                                        transition: 'all 0.3s ease',
-                                        outline: 'none'
-                                    }}
-                                    onFocus={(e) => e.target.style.borderColor = '#2196F3'}
-                                    onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    style={{
-                                        position: 'absolute',
-                                        right: '12px',
-                                        top: '50%',
-                                        transform: 'translateY(-50%)',
-                                        background: 'none',
-                                        border: 'none',
-                                        color: '#9e9e9e',
-                                        cursor: 'pointer',
-                                        padding: 0
-                                    }}
+                        <div className="stat-divider"></div>
+
+                        <div className="stat-item">
+                            <div className="stat-icon-badge bg-purple-100 text-purple-600">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            </div>
+                            <div>
+                                <div className="stat-value">{stats.active}</div>
+                                <div className="stat-label">Active Citizens</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                {/* ================= RIGHT REGISTRATION PANEL ================= */}
+                <div className="login-auth-panel">
+                    
+                    {/* Language Selector Top Right */}
+                    <div className="language-selector-wrapper">
+                        <div className="language-selector-pill">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            <select 
+                                value={language} 
+                                onChange={(e) => setLanguage(e.target.value)}
+                                className="language-select"
+                            >
+                                <option value="English">English</option>
+                                <option value="Spanish">Español</option>
+                                <option value="French">Français</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Centered Desktop Registration Card */}
+                    <div className="login-card-container my-auto py-4">
+                        <div className="login-card max-w-[560px]">
+                            
+                            {/* Card Header */}
+                            <div className="login-card-header">
+                                <h2>Create Your Account</h2>
+                                <div className="subtitle">Join CivicConnect today</div>
+                                <div className="secondary-subtitle">Be a part of cleaner cities and stronger communities.</div>
+                            </div>
+
+                            {/* Inline Error Alert */}
+                            {error && (
+                                <div className="bg-red-50 text-red-600 border border-red-200 p-3 rounded-xl text-xs flex items-center gap-2">
+                                    <span>⚠️</span>
+                                    <span>{error}</span>
+                                </div>
+                            )}
+
+                            {/* Form */}
+                            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+                                
+                                {/* Row 1: First Name & Last Name */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="login-form-group">
+                                        <label className="login-field-label">First Name</label>
+                                        <div className="login-input-wrapper">
+                                            <svg className="login-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                                <circle cx="12" cy="7" r="4"/>
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                value={firstName}
+                                                onChange={(e) => setFirstName(e.target.value)}
+                                                placeholder="Enter your first name"
+                                                required
+                                                className="login-input-field"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="login-form-group">
+                                        <label className="login-field-label">Last Name</label>
+                                        <div className="login-input-wrapper">
+                                            <svg className="login-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                                <circle cx="12" cy="7" r="4"/>
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                value={lastName}
+                                                onChange={(e) => setLastName(e.target.value)}
+                                                placeholder="Enter your last name"
+                                                required
+                                                className="login-input-field"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Email Field */}
+                                <div className="login-form-group">
+                                    <label className="login-field-label">Email Address</label>
+                                    <div className="login-input-wrapper">
+                                        <svg className="login-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                        <input
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            placeholder="Enter your email address"
+                                            required
+                                            className="login-input-field"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Password Field */}
+                                <div className="login-form-group">
+                                    <label className="login-field-label">Password</label>
+                                    <div className="login-input-wrapper">
+                                        <svg className="login-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            placeholder="Create a password"
+                                            required
+                                            className="login-input-field"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="login-password-toggle"
+                                            aria-label={showPassword ? "Hide password" : "Show password"}
+                                        >
+                                            {showPassword ? (
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                            ) : (
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Confirm Password Field */}
+                                <div className="login-form-group">
+                                    <label className="login-field-label">Confirm Password</label>
+                                    <div className="login-input-wrapper">
+                                        <svg className="login-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                        <input
+                                            type={showConfirmPassword ? "text" : "password"}
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="Confirm your password"
+                                            required
+                                            className="login-input-field"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                            className="login-password-toggle"
+                                            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                                        >
+                                            {showConfirmPassword ? (
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                            ) : (
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {password && (
+                                    <div className="-mt-1 flex items-center gap-2">
+                                        <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                                            <div className={`h-full ${strengthColor} transition-all duration-300`} style={{ width: `${strength}%` }}></div>
+                                        </div>
+                                        <span className="text-[10px] text-gray-500">{strengthText}</span>
+                                    </div>
+                                )}
+
+                                {/* Account Type Selector */}
+                                <div className="login-form-group">
+                                    <label className="login-field-label">Account Type</label>
+                                    <div className="login-input-wrapper">
+                                        <svg className="login-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                        </svg>
+                                        <select
+                                            value={role}
+                                            onChange={(e) => {
+                                                setRole(e.target.value);
+                                                if (e.target.value !== 'worker') setDepartment('');
+                                            }}
+                                            className="login-input-field cursor-pointer bg-transparent outline-none"
+                                        >
+                                            <option value="citizen">Citizen</option>
+                                            <option value="worker">Municipal Field Worker</option>
+                                            <option value="admin">Administrator</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {role === 'worker' && (
+                                    <div className="login-form-group animate-fadeIn">
+                                        <label className="login-field-label">Department</label>
+                                        <div className="login-input-wrapper">
+                                            <svg className="login-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                                            </svg>
+                                            <select
+                                                value={department}
+                                                onChange={(e) => setDepartment(e.target.value)}
+                                                required
+                                                className="login-input-field cursor-pointer bg-transparent outline-none"
+                                            >
+                                                <option value="" disabled>Select your department</option>
+                                                <option value="Sanitation">Sanitation</option>
+                                                <option value="Roads & Infrastructure">Roads & Infrastructure</option>
+                                                <option value="Utilities (Water/Power)">Utilities (Water/Power)</option>
+                                                <option value="Parks & Recreation">Parks & Recreation</option>
+                                                <option value="Public Safety">Public Safety</option>
+                                                <option value="Transportation">Transportation</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Terms Checkbox */}
+                                <div className="flex items-center gap-2 mt-1">
+                                    <input 
+                                        type="checkbox" 
+                                        id="terms" 
+                                        checked={acceptedTerms}
+                                        onChange={(e) => setAcceptedTerms(e.target.checked)}
+                                        className="w-4 h-4 cursor-pointer text-blue-600 rounded"
+                                    />
+                                    <label htmlFor="terms" className="text-gray-600 text-xs cursor-pointer select-none">
+                                        I agree to the <span className="text-blue-600 font-medium hover:underline">Terms of Service</span> and <span className="text-blue-600 font-medium hover:underline">Privacy Policy</span>
+                                    </label>
+                                </div>
+
+                                {/* Create Account Button */}
+                                <button 
+                                    type="submit" 
+                                    disabled={isLoading}
+                                    className="login-submit-button"
                                 >
-                                    {showPassword ? (
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                                            <line x1="1" y1="1" x2="23" y2="23"></line>
-                                        </svg>
+                                    {isLoading ? (
+                                        <span>Creating Account...</span>
                                     ) : (
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                            <circle cx="12" cy="12" r="3"></circle>
-                                        </svg>
+                                        <>
+                                            <svg className="login-submit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                                <circle cx="8.5" cy="7" r="4"/>
+                                                <line x1="20" y1="8" x2="20" y2="14"/>
+                                                <line x1="17" y1="11" x2="23" y2="11"/>
+                                            </svg>
+                                            <span>Create Account</span>
+                                        </>
                                     )}
                                 </button>
+                            </form>
+
+                            {/* Sign In Link */}
+                            <div className="register-prompt">
+                                Already have an account? {' '}
+                                <Link to="/login" className="register-link">
+                                    Sign In
+                                </Link>
                             </div>
-                        </div>
 
-                        {/* Role Field */}
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{
-                                display: 'block',
-                                marginBottom: '0.5rem',
-                                color: '#424242',
-                                fontSize: '0.875rem',
-                                fontWeight: 500
-                            }}>
-                                Role
-                            </label>
-                            <div style={{ position: 'relative' }}>
-                                <span style={{
-                                    position: 'absolute',
-                                    left: '12px',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    color: '#9e9e9e',
-                                    pointerEvents: 'none'
-                                }}>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                                    </svg>
-                                </span>
-                                <select
-                                    value={role}
-                                    onChange={(e) => setRole(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem 0.75rem 0.75rem 2.75rem',
-                                        border: '1px solid #e0e0e0',
-                                        borderRadius: '8px',
-                                        fontSize: '0.95rem',
-                                        transition: 'all 0.3s ease',
-                                        outline: 'none',
-                                        cursor: 'pointer',
-                                        appearance: 'none',
-                                        backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%239e9e9e\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")',
-                                        backgroundRepeat: 'no-repeat',
-                                        backgroundPosition: 'right 0.75rem center',
-                                        backgroundSize: '1.25rem'
-                                    }}
-                                    onFocus={(e) => e.target.style.borderColor = '#2196F3'}
-                                    onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-                                >
-                                    <option value="user">User</option>
-                                    <option value="admin">Admin</option>
-                                </select>
+                            {/* Security Notice Panel */}
+                            <div className="security-notice-box">
+                                <svg className="security-notice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                <p className="security-notice-text">
+                                    Your data is secure with enterprise-grade security and privacy protection.
+                                </p>
                             </div>
+
                         </div>
+                    </div>
 
-                        {/* Submit Button */}
-                        <button
-                            type="submit"
-                            style={{
-                                width: '100%',
-                                padding: '0.875rem',
-                                background: 'linear-gradient(135deg, #2196F3, #1976D2)',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '8px',
-                                fontSize: '1rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'all 0.3s ease',
-                                boxShadow: '0 4px 12px rgba(33, 150, 243, 0.3)'
-                            }}
-                            onMouseOver={(e) => {
-                                e.target.style.transform = 'translateY(-2px)';
-                                e.target.style.boxShadow = '0 6px 16px rgba(33, 150, 243, 0.4)';
-                            }}
-                            onMouseOut={(e) => {
-                                e.target.style.transform = 'translateY(0)';
-                                e.target.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.3)';
-                            }}
-                        >
-                            Create Account
-                        </button>
-
-                        {/* Login Link */}
-                        <p style={{
-                            textAlign: 'center',
-                            marginTop: '1.5rem',
-                            color: '#757575',
-                            fontSize: '0.875rem'
-                        }}>
-                            Already have an account?{' '}
-                            <a
-                                href="/login"
-                                style={{
-                                    color: '#2196F3',
-                                    textDecoration: 'none',
-                                    fontWeight: 600
-                                }}
-                            >
-                                Login
-                            </a>
-                        </p>
-                    </form>
+                    <div></div>
                 </div>
+
             </div>
         </div>
     );
 };
 
 export default Register;
+

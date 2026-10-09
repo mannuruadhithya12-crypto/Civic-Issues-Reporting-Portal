@@ -6,24 +6,50 @@ const issueSchema = new mongoose.Schema({
     location: { type: String, required: true },
     locationName: { type: String }, // Reverse geocoded address
     coordinates: {
-        latitude: { type: Number },
-        longitude: { type: Number }
+        type: { type: String, enum: ['Point'], default: 'Point' },
+        coordinates: { type: [Number] } // [longitude, latitude]
     },
     images: [{ type: String }], // Array of image URLs/paths
     status: {
         type: String,
-        enum: ['submitted', 'verified', 'assigned', 'in-progress', 'pending-verification', 'resolved'],
-        default: 'submitted'
+        enum: ['reported', 'verified', 'assigned', 'in_progress', 'resolved', 'closed', 'reopened', 'rejected'],
+        default: 'reported'
     },
-    slaDeadline: { type: Date },
+    slaDeadline: { type: Date }, // legacy
+    sla: {
+        targetHours: { type: Number },
+        dueAt: { type: Date },
+        breachedAt: { type: Date },
+        isBreached: { type: Boolean, default: false }
+    },
     resolvedAt: { type: Date },
     resolutionProof: { type: String }, // URL to image
+    resolutionNotes: { type: String },
     resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    closedAt: { type: Date },
+    closedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    verifiedAt: { type: Date },
+    verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    assignedAt: { type: Date },
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
-    // Category/Department field with new categories
+    citizenVerification: {
+        status: { type: String, enum: ['approved', 'rejected'] },
+        verifiedAt: { type: Date },
+        comment: { type: String }
+    },
+
+    // Category/Department field with expanded categories
     department: {
         type: String,
         enum: [
+            'Roads',
+            'Waste',
+            'Electricity',
+            'Water',
+            'Parks',
+            'Sanitation',
+            'Public Safety',
             'Potholes',
             'Garbage overflow',
             'Streetlight failures',
@@ -36,14 +62,14 @@ const issueSchema = new mongoose.Schema({
             'Public safety issues',
             'Other'
         ],
-        default: 'Potholes'
+        default: 'Roads'
     },
     priority: {
         type: String,
         enum: ['low', 'normal', 'high', 'urgent'],
         default: 'normal'
     },
-    assignedTo: { type: String }, // Worker ID or name
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     comments: [{
         text: { type: String, required: true },
         by: { type: String, required: true }, // Username or email
@@ -55,9 +81,37 @@ const issueSchema = new mongoose.Schema({
         text: { type: String, required: true },
         status: { type: String }
     }],
+    statusHistory: [{
+        status: { type: String },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        changedAt: { type: Date, default: Date.now },
+        comment: { type: String }
+    }],
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdAt: { type: Date, default: Date.now },
+
+    // Sprint 2: AI Metadata and Duplicate Detection
+    aiAnalysis: {
+        category: {
+            value: { type: String },
+            confidence: { type: Number }
+        },
+        severity: {
+            value: { type: String },
+            confidence: { type: Number }
+        },
+        summary: { type: String },
+        analyzedAt: { type: Date }
+    },
+    citizenConfirmedCategory: { type: String },
+    citizenConfirmedSeverity: { type: String },
+    duplicateCandidates: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Issue' }],
+    isDemo: { type: Boolean, default: false }
 });
+
+// Add 2dsphere index for geospatial queries
+issueSchema.index({ coordinates: '2dsphere' });
+
 
 module.exports = mongoose.model('Issue', issueSchema);

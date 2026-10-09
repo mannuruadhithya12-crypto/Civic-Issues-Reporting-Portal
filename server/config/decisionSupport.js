@@ -1,0 +1,20 @@
+module.exports = {
+  PRIORITY: {
+    SEVERITY_WEIGHT: 0.30,
+    SLA_RISK_WEIGHT: 0.20,
+    DENSITY_WEIGHT: 0.15,
+    RECURRENCE_WEIGHT: 0.15,
+    AGE_WEIGHT: 0.10,
+    IMPACT_WEIGHT: 0.10,
+    DEFAULT_IMPACT_SCORE: 50 // Out of 100
+  },
+
+  SLA_RISK: {
+    AT_RISK_THRESHOLD: 0.75, // 75% elapsed
+    BREACHED_THRESHOLD: 1.0  // 100% elapsed
+  },
+
+  SIMULATION: {
+    DEFAULT_WORKER_CAPACITY_PER_DAY: 4
+  }
+};

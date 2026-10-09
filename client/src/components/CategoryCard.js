@@ -1,5 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import Card from './common/Card';
+import Button from './common/Button';
 
 const CATEGORIES = [
     "Potholes",
@@ -15,19 +17,19 @@ const CATEGORIES = [
     "Other"
 ];
 
-// Category icons mapping
+// Category images mapping using realistic photos
 const CATEGORY_ICONS = {
-    "Potholes": "🕳️",
-    "Garbage overflow": "🗑️",
-    "Streetlight failures": "💡",
-    "Water leakage": "💧",
-    "Illegal parking": "🚗",
-    "Drainage issues": "🌊",
-    "Broken footpaths": "🚶",
-    "Noise pollution": "🔊",
-    "Sewage problems": "🚽",
-    "Public safety issues": "⚠️",
-    "Other": "📋"
+    "Potholes": "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=400&q=80",
+    "Garbage overflow": "https://images.unsplash.com/photo-1605600659873-d808a1d84f8c?auto=format&fit=crop&w=400&q=80",
+    "Streetlight failures": "https://images.unsplash.com/photo-1517594422361-5e18d0dd9965?auto=format&fit=crop&w=400&q=80",
+    "Water leakage": "https://images.unsplash.com/photo-1542013936693-884638332954?auto=format&fit=crop&w=400&q=80",
+    "Illegal parking": "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=400&q=80",
+    "Drainage issues": "https://images.unsplash.com/photo-1584839556847-c0e86b45070f?auto=format&fit=crop&w=400&q=80",
+    "Broken footpaths": "https://images.unsplash.com/photo-1517646287270-a5a9ca602518?auto=format&fit=crop&w=400&q=80",
+    "Noise pollution": "https://images.unsplash.com/photo-1528731708534-816fe59f90cb?auto=format&fit=crop&w=400&q=80",
+    "Sewage problems": "https://images.unsplash.com/photo-1582260655554-7f154dbbc468?auto=format&fit=crop&w=400&q=80",
+    "Public safety issues": "https://images.unsplash.com/photo-1585860715330-802c6114aab8?auto=format&fit=crop&w=400&q=80",
+    "Other": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=400&q=80"
 };
 
 function CategoryCard({ category }) {
@@ -39,75 +41,38 @@ function CategoryCard({ category }) {
     };
 
     return (
-        <div style={{
-            background: 'rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '12px',
-            padding: '1.5rem',
-            transition: 'all 0.3s ease',
-            cursor: 'pointer',
-            textAlign: 'center'
-        }}
-            onMouseOver={(e) => {
-                e.currentTarget.style.transform = 'scale(1.05)';
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
-                e.currentTarget.style.borderColor = 'var(--theme-accent)';
-            }}
-            onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-            }}
-            onClick={handleQuickRaise}
+        <Card 
+          onClick={handleQuickRaise}
+          className="flex flex-col items-center text-center cursor-pointer hover:shadow-md hover:border-primary-500 transition-normal"
+          style={{ padding: '0', overflow: 'hidden' }}
         >
-            <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>
-                {CATEGORY_ICONS[category] || "📋"}
+            <div style={{ width: '100%', height: '140px', backgroundColor: '#f1f5f9' }}>
+                <img 
+                    src={CATEGORY_ICONS[category] || CATEGORY_ICONS["Other"]} 
+                    alt={category} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
             </div>
-            <h3 style={{
-                fontSize: '1rem',
-                fontWeight: 600,
-                marginBottom: '0.5rem',
-                color: 'var(--theme-text-dark)'
-            }}>
-                {category}
-            </h3>
-            <p style={{
-                fontSize: '0.75rem',
-                color: 'var(--text-light)',
-                marginBottom: '1rem'
-            }}>
-                Click to report
-            </p>
-            <button
-                onClick={(e) => {
-                    e.stopPropagation();
-                    handleQuickRaise();
-                }}
-                style={{
-                    width: '100%',
-                    padding: '0.5rem 1rem',
-                    fontSize: '0.875rem',
-                    background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    transition: 'all 0.3s ease'
-                }}
-                onMouseOver={(e) => {
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = 'none';
-                }}
-            >
-                Report Issue
-            </button>
-        </div>
+            <div style={{ padding: '16px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <h3 className="text-base font-semibold mb-1 text-primary">
+                    {category}
+                </h3>
+                <p className="text-xs text-secondary mb-4">
+                    Click to report
+                </p>
+                <Button 
+                    variant="primary" 
+                    size="sm"
+                    className="w-full"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuickRaise();
+                    }}
+                >
+                    Report Issue
+                </Button>
+            </div>
+        </Card>
     );
 }
 

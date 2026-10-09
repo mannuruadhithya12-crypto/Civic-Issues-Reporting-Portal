@@ -1,0 +1,38 @@
+/* Responsive Utilities */
+
+@media (max-width: 768px) {
+  /* Hide elements on mobile */
+  .hidden-md {
+    display: none !important;
+  }
+  
+  /* Stack flex containers on mobile */
+  .flex-md-col {
+    flex-direction: column !important;
+  }
+  
+  /* Reset padding for smaller screens */
+  .p-md-2 {
+    padding: var(--spacing-2) !important;
+  }
+}
+
+@media (min-width: 769px) {
+  /* Hide elements on desktop */
+  .hidden-lg {
+    display: none !important;
+  }
+  
+  /* Grid layouts for desktop */
+  .grid-lg-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-6);
+  }
+  
+  .grid-lg-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-6);
+  }
+}
