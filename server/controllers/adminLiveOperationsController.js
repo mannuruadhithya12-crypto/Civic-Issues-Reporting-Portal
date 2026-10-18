@@ -3,6 +3,7 @@ const Issue = require('../models/Issue');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { logAudit } = require('../services/auditService');
+const { getRealTimeWeather } = require('../services/weatherService');
 
 // Helper for date range filtering
 const getRangeFilter = (period = '30d') => {
@@ -229,15 +230,8 @@ exports.getLiveOperationsSummary = async (req, res) => {
                 eta: `${(idx % 4) + 1} hrs`
             }));
 
-        // 9. Weather Data
-        const weatherData = {
-            temp: '28°C',
-            condition: 'Partly Cloudy',
-            humidity: '62%',
-            wind: '12 km/h',
-            airQuality: 'Good',
-            rainChance: '10%'
-        };
+        // 9. Weather Data (Live API)
+        const weatherData = await getRealTimeWeather();
 
         res.json({
             success: true,

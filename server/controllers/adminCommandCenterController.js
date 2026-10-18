@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const InterventionOutcome = require('../models/InterventionOutcome');
 const SystemSettings = require('../models/SystemSettings');
 const mongoose = require('mongoose');
+const { getRealTimeWeather } = require('../services/weatherService');
 
 // Helper to build match stage for date range
 const getRangeFilter = (period, startDateStr, endDateStr) => {
@@ -337,15 +338,8 @@ exports.getCommandCenterSummary = async (req, res) => {
             phone: worker.phone || 'N/A'
         }));
 
-        // Real Weather & City Conditions object
-        const weather = {
-            temp: '28°C',
-            condition: 'Partly Cloudy',
-            humidity: '62%',
-            wind: '12 km/h',
-            airQuality: 'Good',
-            rainChance: '10%'
-        };
+        // Real Weather & City Conditions object (Live API)
+        const weather = await getRealTimeWeather();
 
         res.json({
             success: true,

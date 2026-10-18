@@ -773,14 +773,25 @@ const CommandCenter = ({ issues = [], workers = [], onRefresh }) => {
 
                     {/* Weather & City Conditions */}
                     <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-                            <span style={{ color: '#f59e0b' }}>🌤️</span>
-                            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>Weather & City Conditions</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ color: '#f59e0b' }}>🌤️</span>
+                                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>Weather & City Conditions</h3>
+                            </div>
+                            <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#f1f5f9', color: '#475569' }}>
+                                {weatherData.city || 'Bengaluru'} • Live
+                            </span>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ fontSize: '28px' }}>☀️</span>
+                                <span style={{ fontSize: '28px' }}>
+                                    {weatherData.condition?.toLowerCase().includes('thunder') ? '⛈️' :
+                                     weatherData.condition?.toLowerCase().includes('rain') ? '🌧️' :
+                                     weatherData.condition?.toLowerCase().includes('cloud') ? '⛅' :
+                                     weatherData.condition?.toLowerCase().includes('fog') ? '🌫️' :
+                                     weatherData.condition?.toLowerCase().includes('snow') ? '❄️' : '☀️'}
+                                </span>
                                 <div>
                                     <div style={{ fontSize: '22px', fontWeight: '800', color: '#0f172a', lineHeight: '1' }}>{weatherData.temp}</div>
                                     <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '500', marginTop: '2px' }}>{weatherData.condition}</div>
@@ -790,7 +801,9 @@ const CommandCenter = ({ issues = [], workers = [], onRefresh }) => {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'x 12px y 4px', fontSize: '10px', color: '#64748b' }}>
                                 <div>Humidity: <strong style={{ color: '#0f172a' }}>{weatherData.humidity}</strong></div>
                                 <div>Wind: <strong style={{ color: '#0f172a' }}>{weatherData.wind}</strong></div>
-                                <div>Air Quality: <strong style={{ color: '#16a34a' }}>🟢 {weatherData.airQuality}</strong></div>
+                                <div>Air Quality: <strong style={{ color: weatherData.airQuality?.toLowerCase().includes('good') ? '#16a34a' : weatherData.airQuality?.toLowerCase().includes('moderate') ? '#d97706' : '#dc2626' }}>
+                                    {weatherData.airQuality?.toLowerCase().includes('good') ? '🟢' : weatherData.airQuality?.toLowerCase().includes('moderate') ? '🟡' : '🔴'} {weatherData.airQuality}
+                                </strong></div>
                                 <div>Rain Chance: <strong style={{ color: '#0f172a' }}>{weatherData.rainChance}</strong></div>
                             </div>
                         </div>
