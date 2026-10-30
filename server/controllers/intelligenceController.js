@@ -2,6 +2,7 @@
 const Issue = require('../models/Issue');
 const priorityService = require('../services/priorityService');
 const clusteringService = require('../services/clusteringService');
+const hotspotService = require('../services/hotspotService');
 const { getModelStatus, predictGeographicRisk } = require('../services/predictionService');
 const workloadService = require('../services/workloadService');
 const recommendationService = require('../services/recommendationService');
@@ -142,14 +143,18 @@ exports.getDashboardData = async (req, res) => {
       };
     }).filter(m => !isNaN(m.latitude) && !isNaN(m.longitude));
 
-    const formattedHotspots = (hotspots || []).slice(0, 5).map((h, index) => ({
-      id: h.id || index + 1,
-      name: h.locationName || h.name || `Hotspot Cluster ${index + 1}`,
-      issueCount: h.issueCount || h.issues?.length || 5,
-      riskLevel: h.severity === 'CRITICAL' || h.issueCount > 10 ? 'High' : (h.issueCount > 5 ? 'Medium' : 'Low'),
-      latitude: h.latitude || (h.center ? h.center[0] : 12.9716),
-      longitude: h.longitude || (h.center ? h.center[1] : 77.5946)
-    }));
+    const formattedHotspots = (hotspots || []).slice(0, 5).map((h, index) => {
+      const lat = h.center?.latitude ?? (Array.isArray(h.center) ? h.center[0] : null) ?? h.latitude;
+      const lng = h.center?.longitude ?? (Array.isArray(h.center) ? h.center[1] : null) ?? h.longitude;
+      return {
+        id: h.id || `hotspot-${index + 1}`,
+        name: h.dominantDepartment ? `${h.dominantDepartment} Cluster` : (h.locationName || `Hotspot Cluster ${index + 1}`),
+        issueCount: typeof h.issueCount === 'number' ? h.issueCount : (h.issues?.length || 0),
+        riskLevel: h.severityLevel || (h.issueCount > 10 ? 'High' : (h.issueCount > 5 ? 'Medium' : 'Low')),
+        latitude: lat != null ? lat : 12.9716,
+        longitude: lng != null ? lng : 77.5946
+      };
+    });
 
     // 5. Priority Intelligence
     const priorityCounts = await Issue.aggregate([
@@ -539,3 +544,29 @@ exports.getDecisionSupport = async (req, res) => {
     res.status(500).json({ error: "Server error fetching decision support intelligence" });
   }
 };
+
+/**
+ * GET /api/admin/intelligence/hotspots
+ * Strict admin endpoint returning DBSCAN-detected geospatial hotspots, real issue density,
+ * bounding polygons, and comprehensive metrics from genuine MongoDB records.
+ */
+exports.getHotspots = async (req, res) => {
+  try {
+    const result = await hotspotService.findHotspots(req.query);
+    return res.status(200).json(result);
+  } catch (err) {
+    if (err.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        error: err.message,
+        validationErrors: err.validationErrors || [err.message]
+      });
+    }
+    console.error("Hotspots Endpoint Error:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Server error calculating geospatial hotspots"
+    });
+  }
+};
+

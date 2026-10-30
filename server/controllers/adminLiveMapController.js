@@ -114,13 +114,14 @@ exports.getLiveMapSummary = async (req, res) => {
         };
 
         // Format GIS Markers for Leaflet Map
-        const centerLat = 40.7128;
-        const centerLng = -74.0060;
-
         const formattedMarkers = mapIssues.map(issue => {
             const coords = issue.coordinates?.coordinates || [];
-            const lat = coords[1] || (centerLat + (Math.random() - 0.5) * 0.08);
-            const lng = coords[0] || (centerLng + (Math.random() - 0.5) * 0.08);
+            const lat = coords[1];
+            const lng = coords[0];
+
+            if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+                return null;
+            }
 
             return {
                 id: issue._id,
@@ -128,14 +129,14 @@ exports.getLiveMapSummary = async (req, res) => {
                 category: issue.department || 'Roads',
                 priority: issue.priority || 'normal',
                 status: issue.status || 'reported',
-                location: issue.locationName || 'Central District',
+                location: issue.locationName || issue.location || 'Municipal Area',
                 lat,
                 lng,
                 createdAt: issue.createdAt,
                 assignedToName: issue.assignedTo?.name || 'Unassigned',
                 isSlaRisk: Boolean(issue.sla?.isBreached)
             };
-        });
+        }).filter(Boolean);
 
         // Generate Field Vehicles list (real database backed or active operational equipment)
         const fieldVehicles = [
@@ -157,12 +158,15 @@ exports.getLiveMapSummary = async (req, res) => {
             lastUpdate: w.updatedAt || w.createdAt
         }));
 
-        // Format Nearby Issues with real calculated distance
-        const nearbyIssues = recentIssues.slice(0, 5).map((i, idx) => {
+        // Format Nearby Issues with real calculated distance from first marker or city center
+        const refLat = formattedMarkers.length > 0 ? formattedMarkers[0].lat : 12.9716;
+        const refLng = formattedMarkers.length > 0 ? formattedMarkers[0].lng : 77.5946;
+
+        const nearbyIssues = recentIssues.slice(0, 5).map((i) => {
             const coords = i.coordinates?.coordinates || [];
-            const lat = coords[1] || centerLat;
-            const lng = coords[0] || centerLng;
-            const dist = calculateDistanceKm(centerLat, centerLng, lat, lng) + (idx * 0.4);
+            const lat = typeof coords[1] === 'number' ? coords[1] : refLat;
+            const lng = typeof coords[0] === 'number' ? coords[0] : refLng;
+            const dist = calculateDistanceKm(refLat, refLng, lat, lng);
 
             return {
                 id: i._id,
@@ -170,7 +174,7 @@ exports.getLiveMapSummary = async (req, res) => {
                 category: i.department || 'Roads',
                 priority: i.priority || 'normal',
                 status: i.status || 'reported',
-                location: i.locationName || 'Central District',
+                location: i.locationName || i.location || 'Municipal Area',
                 distanceKm: Math.round(dist * 10) / 10,
                 createdAt: i.createdAt
             };

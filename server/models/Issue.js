@@ -6,7 +6,7 @@ const issueSchema = new mongoose.Schema({
     location: { type: String, required: true },
     locationName: { type: String }, // Reverse geocoded address
     coordinates: {
-        type: { type: String, enum: ['Point'], default: 'Point' },
+        type: { type: String, enum: ['Point'] },
         coordinates: { type: [Number] } // [longitude, latitude]
     },
     images: [{ type: String }], // Array of image URLs/paths

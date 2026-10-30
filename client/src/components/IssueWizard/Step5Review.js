@@ -12,7 +12,17 @@ const blueIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-function Step5Review({ formData, submitIssue, prevStep, goToStep, loading }) {
+function Step5Review({
+  formData,
+  submitIssue,
+  prevStep,
+  goToStep,
+  loading,
+  duplicateState,
+  retryDuplicateCheck,
+  duplicateResult,
+  checkingDuplicates
+}) {
   const [consentChecked, setConsentChecked] = useState(true);
 
   const coords = formData.coordinates && formData.coordinates.lat
@@ -50,6 +60,14 @@ function Step5Review({ formData, submitIssue, prevStep, goToStep, loading }) {
     );
   }
 
+  // Derive active duplicate lifecycle state
+  const state = duplicateState?.status || (checkingDuplicates ? 'loading' : (duplicateResult?.hasDuplicates ? 'candidates' : 'idle'));
+  const candidateData = duplicateState?.data || duplicateResult;
+  const candidates = candidateData?.candidates || (candidateData?.topMatch ? [candidateData.topMatch] : []);
+  const topMatch = candidateData?.topMatch || (candidates.length > 0 ? candidates[0] : null);
+  const matchPct = topMatch ? Math.round((topMatch.confidenceScore || topMatch.similarityScore || 0) * 100) : 0;
+  const distMeters = topMatch ? Math.round(topMatch.distanceMeters || 0) : 0;
+
   return (
     <div className="citizen-card-box" style={{ padding: '32px' }}>
       
@@ -62,6 +80,274 @@ function Step5Review({ formData, submitIssue, prevStep, goToStep, loading }) {
           Please review your issue details before submitting.
         </p>
       </div>
+
+      {/* Duplicate Verification State: Loading */}
+      {state === 'loading' && (
+        <div
+          data-testid="duplicate-loading-step5"
+          style={{
+            backgroundColor: '#eff6ff',
+            border: '1.5px solid #bfdbfe',
+            borderRadius: '20px',
+            padding: '16px 20px',
+            marginBottom: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}
+        >
+          <div
+            style={{
+              width: '18px',
+              height: '18px',
+              border: '2px solid #2563eb',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}
+          />
+          <div style={{ fontSize: '13px', color: '#1e40af', fontWeight: '600' }}>
+            CivicConnect AI: Verifying vicinity for duplicate complaints...
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Verification State: Candidates Found */}
+      {state === 'candidates' && topMatch && (
+        <div
+          data-testid="duplicate-candidates-step5"
+          style={{
+            backgroundColor: '#fffbeb',
+            border: '1.5px solid #fde68a',
+            borderRadius: '20px',
+            padding: '20px 24px',
+            marginBottom: '28px',
+            boxShadow: '0 4px 14px rgba(245, 158, 11, 0.08)'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span
+                style={{
+                  backgroundColor: '#fef3c7',
+                  color: '#92400e',
+                  padding: '4px 12px',
+                  borderRadius: '9999px',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                CivicConnect AI • Potential Duplicate Notice
+              </span>
+              {candidates.length > 1 && (
+                <span style={{ fontSize: '11px', color: '#b45309', fontWeight: '600' }}>
+                  ({candidates.length} similar complaints nearby)
+                </span>
+              )}
+            </div>
+
+            <span
+              style={{
+                backgroundColor: matchPct >= 80 ? '#fef2f2' : '#fef3c7',
+                color: matchPct >= 80 ? '#b91c1c' : '#b45309',
+                border: matchPct >= 80 ? '1px solid #fecaca' : '1px solid #fde68a',
+                padding: '4px 12px',
+                borderRadius: '9999px',
+                fontSize: '12px',
+                fontWeight: '800'
+              }}
+            >
+              {matchPct}% Match
+            </span>
+          </div>
+
+          <div style={{ fontSize: '15px', fontWeight: '800', color: '#78350f', marginBottom: '6px' }}>
+            A similar issue was reported nearby ({distMeters}m away)
+          </div>
+
+          <p style={{ fontSize: '12px', color: '#92400e', margin: '0 0 14px 0', lineHeight: '1.4' }}>
+            Our geospatial and language matching engine identified potential existing complaints in this vicinity. Suggestions are recommendations only, not confirmed duplicates.
+          </p>
+
+          {/* Primary Ticket preview card */}
+          <div
+            data-testid={`duplicate-card-${topMatch.issueId}`}
+            style={{
+              backgroundColor: '#ffffff',
+              border: '1px solid #fcd34d',
+              borderRadius: '14px',
+              padding: '14px 18px',
+              display: 'flex',
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px',
+              marginBottom: candidates.length > 1 ? '10px' : '0'
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a', marginBottom: '4px' }}>
+                {topMatch.title}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#64748b' }}>
+                <span style={{ background: '#f1f5f9', color: '#334155', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>
+                  {topMatch.category || topMatch.department}
+                </span>
+                <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', textTransform: 'capitalize' }}>
+                  Status: {topMatch.status || 'Reported'}
+                </span>
+                <span>• {distMeters}m from your pin</span>
+              </div>
+            </div>
+
+            <a
+              href={`/issues/${topMatch.issueId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                backgroundColor: '#1d61f2',
+                color: '#ffffff',
+                padding: '8px 16px',
+                borderRadius: '9999px',
+                fontSize: '12px',
+                fontWeight: '700',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 8px rgba(29, 97, 242, 0.25)'
+              }}
+            >
+              View Existing Ticket
+              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          </div>
+
+          {/* Additional Candidates List if > 1 */}
+          {candidates.length > 1 && (
+            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {candidates.slice(1).map((cand) => (
+                <div
+                  key={cand.issueId}
+                  data-testid={`duplicate-card-${cand.issueId}`}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '12px'
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: '700', color: '#0f172a' }}>{cand.title}</span>
+                    <span style={{ color: '#64748b', marginLeft: '8px' }}>
+                      ({Math.round((cand.confidenceScore || cand.similarityScore || 0) * 100)}% match, ~{Math.round(cand.distanceMeters || 0)}m away)
+                    </span>
+                  </div>
+                  <a
+                    href={`/issues/${cand.issueId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#1d61f2', fontWeight: '700', textDecoration: 'none', fontSize: '11px' }}
+                  >
+                    View &rsaquo;
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ fontSize: '11px', color: '#b45309', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>You may still proceed to submit this report below if it represents a separate incident or recurring issue. Reports are never auto-merged.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Verification State: Empty (No duplicates found) */}
+      {state === 'empty' && (
+        <div
+          data-testid="duplicate-empty-step5"
+          style={{
+            backgroundColor: '#f0fdf4',
+            border: '1.5px solid #86efac',
+            borderRadius: '20px',
+            padding: '16px 20px',
+            marginBottom: '28px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px'
+          }}
+        >
+          <span style={{ fontSize: '18px', color: '#16a34a' }}>✓</span>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: '800', color: '#14532d' }}>
+              CivicConnect AI Verified • No Duplicates Found
+            </div>
+            <div style={{ fontSize: '12px', color: '#166534', marginTop: '2px' }}>
+              No matching complaints were found within a 300m radius of your selected coordinates. Your report appears unique.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Verification State: API Error */}
+      {state === 'error' && (
+        <div
+          data-testid="duplicate-error-step5"
+          style={{
+            backgroundColor: '#fef2f2',
+            border: '1.5px solid #fca5a5',
+            borderRadius: '20px',
+            padding: '16px 20px',
+            marginBottom: '28px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#991b1b' }}>
+              Duplicate verification unavailable: {duplicateState?.error || 'Service unreachable'}
+            </div>
+            {retryDuplicateCheck && (
+              <button
+                type="button"
+                onClick={retryDuplicateCheck}
+                style={{
+                  background: '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Retry Check
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: '11px', color: '#b91c1c' }}>
+            You can still submit your issue. Duplicate checking is purely advisory and non-blocking.
+          </div>
+        </div>
+      )}
 
       {/* 2-Column Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', marginBottom: '32px' }}>

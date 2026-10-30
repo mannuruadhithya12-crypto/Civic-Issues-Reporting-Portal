@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 
@@ -24,6 +24,17 @@ function IssueWizard() {
   const [loading, setLoading] = useState(false);
   const [submittedIssue, setSubmittedIssue] = useState(null);
 
+  // Hybrid duplicate detection lifecycle state
+  const [duplicateState, setDuplicateState] = useState({
+    status: 'idle', // 'idle' | 'loading' | 'candidates' | 'empty' | 'error'
+    data: null,
+    error: null,
+    lastCheckedAt: null
+  });
+
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef(null);
+
   const [formData, setFormData] = useState({
     category: 'Roads',
     title: '',
@@ -34,6 +45,97 @@ function IssueWizard() {
     images: [],
     imagePreviews: []
   });
+
+  // Debounced duplicate check when title, coordinates, and category are present
+  const checkDuplicates = useCallback(async () => {
+    const lat = formData.coordinates?.lat ?? (Array.isArray(formData.coordinates) ? formData.coordinates[1] : null);
+    const lng = formData.coordinates?.lng ?? (Array.isArray(formData.coordinates) ? formData.coordinates[0] : null);
+
+    const hasValidTitle = formData.title && formData.title.trim().length >= 4;
+    const hasValidCoords = lat != null && lng != null && !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    const hasCategory = Boolean(formData.category);
+
+    if (!hasValidTitle || !hasValidCoords || !hasCategory) {
+      setDuplicateState({
+        status: 'idle',
+        data: null,
+        error: null,
+        lastCheckedAt: null
+      });
+      return;
+    }
+
+    // Cancel any previous in-flight request to prevent race conditions
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    const currentReqId = ++requestIdRef.current;
+    setDuplicateState((prev) => ({
+      ...prev,
+      status: 'loading',
+      error: null
+    }));
+
+    try {
+      const res = await api.post(
+        '/issues/check-duplicates',
+        {
+          title: formData.title.trim(),
+          description: formData.description || '',
+          category: formData.category,
+          latitude: Number(lat),
+          longitude: Number(lng),
+          radiusMeters: 300
+        },
+        { signal: abortController.signal }
+      );
+
+      // Discard stale responses if a newer request was dispatched
+      if (currentReqId !== requestIdRef.current) return;
+
+      if (res.data && res.data.hasDuplicates && res.data.candidates && res.data.candidates.length > 0) {
+        setDuplicateState({
+          status: 'candidates',
+          data: res.data,
+          error: null,
+          lastCheckedAt: new Date().toISOString()
+        });
+      } else {
+        setDuplicateState({
+          status: 'empty',
+          data: res.data || { hasDuplicates: false, matchCount: 0, candidates: [] },
+          error: null,
+          lastCheckedAt: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      // Ignore aborted requests cleanly
+      if (err.name === 'CanceledError' || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+        return;
+      }
+      // Discard stale response errors
+      if (currentReqId !== requestIdRef.current) return;
+
+      const errMsg = err.response?.data?.message || err.message || 'Duplicate check failed';
+      setDuplicateState({
+        status: 'error',
+        data: null,
+        error: errMsg,
+        lastCheckedAt: new Date().toISOString()
+      });
+    }
+  }, [formData.title, formData.description, formData.category, formData.coordinates]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkDuplicates();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [checkDuplicates]);
 
   const updateFormData = (data) => {
     setFormData((prev) => ({ ...prev, ...data }));
@@ -177,6 +279,10 @@ function IssueWizard() {
             updateFormData={updateFormData}
             nextStep={nextStep}
             prevStep={prevStep}
+            duplicateState={duplicateState}
+            retryDuplicateCheck={checkDuplicates}
+            duplicateResult={duplicateState.data}
+            checkingDuplicates={duplicateState.status === 'loading'}
           />
         )}
 
@@ -196,6 +302,10 @@ function IssueWizard() {
             prevStep={prevStep}
             goToStep={goToStep}
             loading={loading}
+            duplicateState={duplicateState}
+            retryDuplicateCheck={checkDuplicates}
+            duplicateResult={duplicateState.data}
+            checkingDuplicates={duplicateState.status === 'loading'}
           />
         )}
 

@@ -49,7 +49,16 @@ function MapUpdater({ center }) {
   return null;
 }
 
-function Step3Location({ formData, updateFormData, nextStep, prevStep }) {
+function Step3Location({
+  formData,
+  updateFormData,
+  nextStep,
+  prevStep,
+  duplicateState,
+  retryDuplicateCheck,
+  duplicateResult,
+  checkingDuplicates
+}) {
   const defaultCenter = { lat: 12.9716, lng: 77.5946 };
   
   const [position, setPosition] = useState(
@@ -279,6 +288,142 @@ function Step3Location({ formData, updateFormData, nextStep, prevStep }) {
           </svg> Click on the map to set the exact location. Drag the marker to adjust if needed.
         </div>
       </div>
+
+      {/* Duplicate Check Notice (Non-blocking: loading, candidates, empty, or error) */}
+      {(() => {
+        const state = duplicateState?.status || (checkingDuplicates ? 'loading' : (duplicateResult?.hasDuplicates ? 'candidates' : 'idle'));
+        const data = duplicateState?.data || duplicateResult;
+        const topMatch = data?.topMatch;
+
+        if (state === 'loading') {
+          return (
+            <div
+              data-testid="duplicate-loading-step3"
+              style={{
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '8px 14px',
+                fontSize: '12px',
+                color: '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '16px'
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#3b82f6',
+                  animation: 'pulse 1.5s infinite'
+                }}
+              />
+              CivicConnect AI: Scanning vicinity for existing complaints...
+            </div>
+          );
+        }
+
+        if (state === 'candidates' && topMatch) {
+          return (
+            <div
+              data-testid="duplicate-candidates-step3"
+              style={{
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fef08a',
+                borderRadius: '14px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px'
+              }}
+            >
+              <div style={{ color: '#d97706', marginTop: '2px' }}>
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#92400e', marginBottom: '2px' }}>
+                  Nearby Similar Report Found (~{Math.round(topMatch.distanceMeters)}m away)
+                </div>
+                <div style={{ fontSize: '12px', color: '#b45309', lineHeight: '1.4' }}>
+                  An existing ticket <strong>"{topMatch.title}"</strong> ({Math.round(topMatch.confidenceScore * 100)}% match) was found nearby. Suggestions are recommendations, not confirmed duplicates. You can review candidates on the Review step or continue submitting.
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (state === 'empty') {
+          return (
+            <div
+              data-testid="duplicate-empty-step3"
+              style={{
+                backgroundColor: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: '12px',
+                padding: '8px 14px',
+                fontSize: '12px',
+                color: '#166534',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '16px'
+              }}
+            >
+              <span style={{ fontWeight: 'bold' }}>✓</span>
+              CivicConnect AI: No duplicate complaints found within 300m. Your issue appears distinct.
+            </div>
+          );
+        }
+
+        if (state === 'error') {
+          return (
+            <div
+              data-testid="duplicate-error-step3"
+              style={{
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '12px',
+                padding: '8px 14px',
+                fontSize: '12px',
+                color: '#991b1b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '16px'
+              }}
+            >
+              <span>Duplicate check temporarily unavailable ({duplicateState?.error || 'Network error'}). You may proceed.</span>
+              {retryDuplicateCheck && (
+                <button
+                  type="button"
+                  onClick={retryDuplicateCheck}
+                  style={{
+                    background: '#dc2626',
+                    color: 'white',
+                    border: 'none',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          );
+        }
+
+        return null;
+      })()}
 
       {/* Location Details Inputs */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px', marginBottom: '28px' }}>

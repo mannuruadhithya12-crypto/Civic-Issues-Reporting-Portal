@@ -118,62 +118,17 @@ exports.getIssueById = async (req, res) => {
         .populate("createdBy", "name username email")
         .populate("assignedTo", "name username email department dutyStatus")
         .populate("resolvedBy", "name email")
-        .populate("duplicateCandidates", "title department status priority locationName");
-    }
-
-    // Fallback if not found or non-ObjectId ID like '00123' or 'ref-demo-1'
-    if (!issue) {
-      // Try finding by partial ID or title regex
-      issue = await Issue.findOne({
-        $or: [
-          { title: { $regex: 'Pothole Repair', $options: 'i' } },
-          { department: 'Roads' }
-        ]
-      })
-      .populate("createdBy", "name username email")
-      .populate("assignedTo", "name username email department dutyStatus");
+        .populate("duplicateCandidates", "title department status priority locationName coordinates");
     }
 
     if (!issue) {
-      // Return a clean fallback object for demo tasks like '00123'
-      return res.json({
-        _id: id || '00123',
-        title: 'Pothole Repair - Main Street',
-        description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-        location: 'Main Street, Near Metro Station',
-        locationName: 'Main Street, Near Metro Station',
-        department: 'Roads',
-        category: 'Pothole',
-        priority: 'high',
-        status: 'assigned',
-        createdAt: new Date(),
-        assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-        assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-        sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-        images: []
-      });
+      return res.status(404).json({ message: "Issue not found" });
     }
 
     res.json(issue);
   } catch (err) {
-    console.error("getIssueById notice:", err.message);
-    // Return fallback rather than 500 error
-    res.json({
-      _id: req.params.id || '00123',
-      title: 'Pothole Repair - Main Street',
-      description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-      location: 'Main Street, Near Metro Station',
-      locationName: 'Main Street, Near Metro Station',
-      department: 'Roads',
-      category: 'Pothole',
-      priority: 'high',
-      status: 'assigned',
-      createdAt: new Date(),
-      assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-      assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-      sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-      images: []
-    });
+    console.error("getIssueById error:", err.message);
+    res.status(500).json({ message: "Server error fetching issue" });
   }
 };
 
@@ -540,23 +495,7 @@ exports.startWork = async (req, res) => {
         }
 
         if (!issue) {
-            return res.json({
-                _id: req.params.id || '00123',
-                title: 'Pothole Repair - Main Street',
-                description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-                location: 'Main Street, Near Metro Station',
-                locationName: 'Main Street, Near Metro Station',
-                department: 'Roads',
-                category: 'Pothole',
-                priority: 'high',
-                status: 'in_progress',
-                createdAt: new Date(),
-                assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-                assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-                sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-                images: [],
-                coordinates: { coordinates: [77.5946, 12.9716] }
-            });
+            return res.status(404).json({ message: "Issue not found" });
         }
 
         if (issue.assignedTo && issue.assignedTo.toString() !== req.user.id && issue.assignedTo.toString() !== (req.user._id && req.user._id.toString())) {
@@ -588,24 +527,8 @@ exports.startWork = async (req, res) => {
 
         res.json(issue);
     } catch (err) {
-        console.error("startWork notice:", err.message);
-        res.json({
-            _id: req.params.id || '00123',
-            title: 'Pothole Repair - Main Street',
-            description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-            location: 'Main Street, Near Metro Station',
-            locationName: 'Main Street, Near Metro Station',
-            department: 'Roads',
-            category: 'Pothole',
-            priority: 'high',
-            status: 'in_progress',
-            createdAt: new Date(),
-            assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-            assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-            sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-            images: [],
-            coordinates: { coordinates: [77.5946, 12.9716] }
-        });
+        console.error("startWork error:", err.message);
+        res.status(500).json({ message: "Server error starting task" });
     }
 };
 
@@ -618,27 +541,7 @@ exports.resolveIssue = async (req, res) => {
         }
 
         if (!issue) {
-            const proofPath = req.file ? `/uploads/${req.file.filename}` : null;
-            return res.json({
-                _id: req.params.id || '00123',
-                title: 'Pothole Repair - Main Street',
-                description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-                location: 'Main Street, Near Metro Station',
-                locationName: 'Main Street, Near Metro Station',
-                department: 'Roads',
-                category: 'Pothole',
-                priority: 'high',
-                status: 'resolved',
-                resolutionProof: proofPath || '/uploads/sample_proof.jpg',
-                resolutionNotes: req.body.resolutionNotes || req.body.notes || 'Task completed successfully.',
-                proofOfWork: proofPath ? [proofPath] : ['/uploads/sample_proof.jpg'],
-                createdAt: new Date(),
-                assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-                assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-                sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-                images: [],
-                coordinates: { coordinates: [77.5946, 12.9716] }
-            });
+            return res.status(404).json({ message: "Issue not found" });
         }
 
         if (issue.assignedTo && issue.assignedTo.toString() !== req.user.id && issue.assignedTo.toString() !== (req.user._id && req.user._id.toString())) {
@@ -696,25 +599,8 @@ exports.resolveIssue = async (req, res) => {
 
         res.json(issue);
     } catch (err) {
-        console.error("resolveIssue notice:", err.message);
-        res.json({
-            _id: req.params.id || '00123',
-            title: 'Pothole Repair - Main Street',
-            description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-            location: 'Main Street, Near Metro Station',
-            locationName: 'Main Street, Near Metro Station',
-            department: 'Roads',
-            category: 'Pothole',
-            priority: 'high',
-            status: 'resolved',
-            resolutionNotes: req.body.notes || 'Task completed successfully',
-            createdAt: new Date(),
-            assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-            assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-            sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-            images: [],
-            coordinates: { coordinates: [77.5946, 12.9716] }
-        });
+        console.error("resolveIssue error:", err.message);
+        res.status(500).json({ message: "Server error resolving issue" });
     }
 };
 
@@ -826,17 +712,54 @@ exports.addImages = async (req, res) => {
 };
 
 exports.checkDuplicates = async (req, res) => {
-  const { latitude, longitude, category, radius } = req.body;
-  if (!latitude || !longitude || !category) {
-    return res.status(400).json({ message: "Latitude, longitude, and category are required." });
+  const {
+    latitude,
+    lat,
+    longitude,
+    lng,
+    lon,
+    category,
+    department,
+    title,
+    description,
+    radius,
+    radiusMeters,
+    excludeIssueId
+  } = req.body;
+
+  const targetLat = latitude !== undefined ? latitude : lat;
+  const targetLon = longitude !== undefined ? longitude : (lng !== undefined ? lng : lon);
+
+  if (targetLat === undefined || targetLon === undefined) {
+    return res.status(400).json({
+      success: false,
+      message: "Latitude and longitude are required."
+    });
   }
 
   try {
-    const duplicates = await duplicateService.checkDuplicates(latitude, longitude, category, radius || 500);
-    res.json(duplicates);
+    const result = await duplicateService.findDuplicates({
+      latitude: targetLat,
+      longitude: targetLon,
+      title: title || '',
+      description: description || '',
+      category: category || department,
+      department: department || category,
+      radiusMeters: radiusMeters || radius || 300,
+      excludeIssueId
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error checking duplicates" });
+    console.error("Error checking duplicates:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error checking duplicates"
+    });
   }
 };
 
@@ -1062,16 +985,16 @@ exports.getCitizenDashboard = async (req, res) => {
 
     res.json({
       stats: {
-        issuesReported: reportedCount > 0 ? reportedCount : 76,
-        issuesResolved: resolvedCount > 0 ? resolvedCount : 40,
-        activeCitizens: activeCitizensCount > 0 ? activeCitizensCount : 4,
+        issuesReported: reportedCount,
+        issuesResolved: resolvedCount,
+        activeCitizens: activeCitizensCount,
         avgResolutionTime: avgResolutionDays,
-        reportedPercentChange: 12
+        reportedPercentChange: 0
       },
-      recentIssues: recentIssues.length > 0 ? recentIssues : MOCK_DEMO_ISSUES,
-      nearbyIssues: nearbyIssues.length > 0 ? nearbyIssues : MOCK_DEMO_ISSUES,
+      recentIssues: recentIssues,
+      nearbyIssues: nearbyIssues,
       unreadNotificationsCount: unreadCount,
-      announcements: allAnnouncements.length > 0 ? allAnnouncements : MOCK_DEMO_ANNOUNCEMENTS
+      announcements: allAnnouncements
     });
   } catch (err) {
     console.error("Dashboard endpoint error:", err);
@@ -1171,11 +1094,23 @@ exports.getMapData = async (req, res) => {
 
       if (issue.coordinates) {
         if (issue.coordinates.coordinates && Array.isArray(issue.coordinates.coordinates) && issue.coordinates.coordinates.length === 2) {
+          // Standard GeoJSON Point is [longitude, latitude]
           itemLng = issue.coordinates.coordinates[0];
           itemLat = issue.coordinates.coordinates[1];
         } else if (Array.isArray(issue.coordinates) && issue.coordinates.length === 2) {
-          itemLat = issue.coordinates[0];
-          itemLng = issue.coordinates[1];
+          const val0 = issue.coordinates[0];
+          const val1 = issue.coordinates[1];
+          if (Math.abs(val0) > 90 && Math.abs(val1) <= 90) {
+            itemLng = val0;
+            itemLat = val1;
+          } else if (Math.abs(val1) > 90 && Math.abs(val0) <= 90) {
+            itemLat = val0;
+            itemLng = val1;
+          } else {
+            // Default GeoJSON convention [longitude, latitude]
+            itemLng = val0;
+            itemLat = val1;
+          }
         }
       }
 
@@ -1193,20 +1128,16 @@ exports.getMapData = async (req, res) => {
       }
     });
 
-    const finalIssues = issuesWithCoords.length > 0 ? issuesWithCoords : MOCK_DEMO_ISSUES.map(issue => ({
-      ...issue,
-      lat: Array.isArray(issue.coordinates) ? issue.coordinates[1] : 12.9716,
-      lng: Array.isArray(issue.coordinates) ? issue.coordinates[0] : 77.5946
-    }));
+    const finalIssues = issuesWithCoords;
 
     const nearbyIssues = [...finalIssues];
     if (hasUserLocation) {
       nearbyIssues.sort((a, b) => (a.distance || 0) - (b.distance || 0));
     }
 
-    const totalCount = allMatchingIssues.length > 0 ? allMatchingIssues.length : 76;
-    const resolvedCount = allMatchingIssues.length > 0 ? allMatchingIssues.filter(i => ['resolved'].includes((i.status || '').toLowerCase())).length : 33;
-    const inProgressCount = allMatchingIssues.length > 0 ? allMatchingIssues.filter(i => ['in_progress', 'assigned'].includes((i.status || '').toLowerCase())).length : 24;
+    const totalCount = allMatchingIssues.length;
+    const resolvedCount = allMatchingIssues.filter(i => ['resolved', 'closed'].includes((i.status || '').toLowerCase())).length;
+    const inProgressCount = allMatchingIssues.filter(i => ['in_progress', 'assigned'].includes((i.status || '').toLowerCase())).length;
 
     const uniqueAreas = new Set();
     allMatchingIssues.forEach(i => {
@@ -1226,7 +1157,7 @@ exports.getMapData = async (req, res) => {
         total: totalCount,
         resolved: resolvedCount,
         inProgress: inProgressCount,
-        activeAreas: uniqueAreas.size > 0 ? uniqueAreas.size : 8
+        activeAreas: uniqueAreas.size
       }
     });
   } catch (err) {
