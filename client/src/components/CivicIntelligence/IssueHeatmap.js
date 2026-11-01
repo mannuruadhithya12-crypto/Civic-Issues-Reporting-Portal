@@ -127,6 +127,11 @@ function IssueHeatmap({ data }) {
                     <div className="text-sm text-text-secondary">
                       <strong className="text-text-primary">Severity:</strong> {hotspot.severityLevel || hotspot.topSeverity || 'Medium'}
                     </div>
+                    <div className="mt-2 pt-2 border-t border-slate-100 text-xs">
+                      <span style={{ color: '#4f46e5', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        ✨ AI Explain in Geographic Analysis
+                      </span>
+                    </div>
                   </div>
                 </Popup>
               </Circle>

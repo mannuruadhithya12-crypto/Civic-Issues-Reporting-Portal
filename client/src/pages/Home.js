@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
+import { useDataMode } from "../context/DataModeContext";
 import api from "../services/api";
 
 // Leaflet map imports
@@ -90,6 +91,7 @@ const formatStatusText = (status) => {
 function Home() {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
+  const { isDemo } = useDataMode();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -212,15 +214,15 @@ const FALLBACK_DEMO_ANNOUNCEMENTS = [
 
       if (res && res.data && res.data.stats) {
         setStats({
-          issuesReported: res.data.stats.issuesReported || 76,
-          issuesResolved: res.data.stats.issuesResolved || 40,
-          activeCitizens: res.data.stats.activeCitizens || 4,
-          avgResolutionTime: res.data.stats.avgResolutionTime || '2.3 days',
-          reportedPercentChange: res.data.stats.reportedPercentChange || 12
+          issuesReported: res.data.stats.issuesReported ?? 0,
+          issuesResolved: res.data.stats.issuesResolved ?? 0,
+          activeCitizens: res.data.stats.activeCitizens ?? 0,
+          avgResolutionTime: res.data.stats.avgResolutionTime || 'N/A',
+          reportedPercentChange: res.data.stats.reportedPercentChange ?? 0
         });
-        const rIssues = (res.data.recentIssues && res.data.recentIssues.length > 0) ? res.data.recentIssues : FALLBACK_DEMO_ISSUES;
-        const mIssues = (res.data.nearbyIssues && res.data.nearbyIssues.length > 0) ? res.data.nearbyIssues : FALLBACK_DEMO_ISSUES;
-        const aList = (res.data.announcements && res.data.announcements.length > 0) ? res.data.announcements : FALLBACK_DEMO_ANNOUNCEMENTS;
+        const rIssues = (res.data.recentIssues && res.data.recentIssues.length > 0) ? res.data.recentIssues : (isDemo ? FALLBACK_DEMO_ISSUES : []);
+        const mIssues = (res.data.nearbyIssues && res.data.nearbyIssues.length > 0) ? res.data.nearbyIssues : (isDemo ? FALLBACK_DEMO_ISSUES : []);
+        const aList = (res.data.announcements && res.data.announcements.length > 0) ? res.data.announcements : (isDemo ? FALLBACK_DEMO_ANNOUNCEMENTS : []);
         
         setRecentIssues(rIssues);
         setMapIssues(mIssues);
@@ -231,14 +233,17 @@ const FALLBACK_DEMO_ANNOUNCEMENTS = [
           api.get('/announcements').catch(() => ({ data: [] }))
         ]);
 
-        const allIssues = Array.isArray(issuesRes.data) && issuesRes.data.length > 0 ? issuesRes.data : FALLBACK_DEMO_ISSUES;
-        const allAnnouncements = Array.isArray(annRes.data) && annRes.data.length > 0 ? annRes.data : FALLBACK_DEMO_ANNOUNCEMENTS;
+        const rawIssues = Array.isArray(issuesRes.data) ? issuesRes.data : [];
+        const rawAnnouncements = Array.isArray(annRes.data) ? annRes.data : [];
 
-        const reportedCount = allIssues.length > 0 ? allIssues.length : 76;
-        const resolvedIssues = allIssues.filter(i => i.status === 'resolved' || i.status === 'closed');
-        const resolvedCount = resolvedIssues.length > 0 ? resolvedIssues.length : 40;
+        const allIssues = rawIssues.length > 0 ? rawIssues : (isDemo ? FALLBACK_DEMO_ISSUES : []);
+        const allAnnouncements = rawAnnouncements.length > 0 ? rawAnnouncements : (isDemo ? FALLBACK_DEMO_ANNOUNCEMENTS : []);
 
-        let avgDays = '2.3 days';
+        const reportedCount = rawIssues.length;
+        const resolvedIssues = rawIssues.filter(i => i.status === 'resolved' || i.status === 'closed');
+        const resolvedCount = resolvedIssues.length;
+
+        let avgDays = 'N/A';
         if (resolvedIssues.length > 0) {
           const totalMs = resolvedIssues.reduce((sum, issue) => {
             const end = issue.resolvedAt || issue.closedAt || new Date();
@@ -250,7 +255,7 @@ const FALLBACK_DEMO_ANNOUNCEMENTS = [
         }
 
         const uniqueUserIds = new Set();
-        allIssues.forEach(i => {
+        rawIssues.forEach(i => {
           if (i.createdBy) {
             const uid = typeof i.createdBy === 'object' ? i.createdBy._id : i.createdBy;
             if (uid) uniqueUserIds.add(uid.toString());
@@ -260,9 +265,9 @@ const FALLBACK_DEMO_ANNOUNCEMENTS = [
         setStats({
           issuesReported: reportedCount,
           issuesResolved: resolvedCount,
-          activeCitizens: uniqueUserIds.size > 0 ? uniqueUserIds.size : 4,
+          activeCitizens: uniqueUserIds.size,
           avgResolutionTime: avgDays,
-          reportedPercentChange: 12
+          reportedPercentChange: 0
         });
 
         const sorted = [...allIssues].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -272,16 +277,23 @@ const FALLBACK_DEMO_ANNOUNCEMENTS = [
       }
     } catch (err) {
       console.error("Dashboard fetch error:", err);
+      setError("Unable to load latest dashboard statistics.");
       setStats({
-        issuesReported: 76,
-        issuesResolved: 40,
-        activeCitizens: 4,
-        avgResolutionTime: '2.3 days',
-        reportedPercentChange: 12
+        issuesReported: 0,
+        issuesResolved: 0,
+        activeCitizens: 0,
+        avgResolutionTime: 'N/A',
+        reportedPercentChange: 0
       });
-      setRecentIssues(FALLBACK_DEMO_ISSUES);
-      setMapIssues(FALLBACK_DEMO_ISSUES);
-      setAnnouncements(FALLBACK_DEMO_ANNOUNCEMENTS);
+      if (isDemo) {
+        setRecentIssues(FALLBACK_DEMO_ISSUES);
+        setMapIssues(FALLBACK_DEMO_ISSUES);
+        setAnnouncements(FALLBACK_DEMO_ANNOUNCEMENTS);
+      } else {
+        setRecentIssues([]);
+        setMapIssues([]);
+        setAnnouncements([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -289,7 +301,7 @@ const FALLBACK_DEMO_ANNOUNCEMENTS = [
 
   useEffect(() => {
     loadDashboardData();
-  }, [user]);
+  }, [user, isDemo]);
 
   if (user && user.role === 'admin') {
     return <Navigate to="/admin" replace />;

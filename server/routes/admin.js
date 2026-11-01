@@ -23,6 +23,16 @@ router.get('/command-center/search', commandCenterController.globalSearch);
 router.get('/command-center/export', commandCenterController.exportCommandCenterData);
 router.get('/command-center/system-status', commandCenterController.getSystemStatus);
 
+// --- GEMINI CORE FOUNDATION DIAGNOSTICS ---
+const { getStaticDiagnostics, performSmokeTest } = require('../services/gemini/geminiDiagnostics');
+router.get('/gemini/diagnostics', (req, res) => {
+  res.json(getStaticDiagnostics());
+});
+router.post('/gemini/smoke-test', async (req, res) => {
+  const result = await performSmokeTest(req.body);
+  res.json(result);
+});
+
 // --- LIVE MAP GIS SUMMARY ---
 router.get('/live-map/summary', liveMapController.getLiveMapSummary);
 

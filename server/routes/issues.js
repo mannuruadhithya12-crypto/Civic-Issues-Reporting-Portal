@@ -14,6 +14,7 @@ router.get('/my-tickets', auth, issueController.getMyTickets);
 router.get('/:id', auth, issueController.getIssueById);
 router.post('/', auth, upload.array('images', 5), issueController.createIssue);
 router.post('/check-duplicates', auth, issueController.checkDuplicates);
+router.post('/ai-assist', auth, issueController.aiAssist);
 
 // Admin / Worker
 router.put('/bulk-update', auth, admin, issueController.bulkUpdate);

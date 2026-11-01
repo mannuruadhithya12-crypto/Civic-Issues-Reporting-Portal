@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../../services/api';
 
 const PredictedRisks = () => {
     const [predictions, setPredictions] = useState([]);
@@ -8,18 +9,12 @@ const PredictedRisks = () => {
     useEffect(() => {
         const fetchPredictions = async () => {
             try {
-                const token = localStorage.getItem('token');
-                const res = await fetch('http://localhost:5000/api/predictions/geographic', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    setPredictions(data);
-                } else {
-                    setError(data.error);
+                const res = await api.get('/predictions/geographic');
+                if (res.data) {
+                    setPredictions(res.data);
                 }
             } catch (err) {
-                setError('Failed to fetch predictions');
+                setError(err.response?.data?.error || 'Failed to fetch predictions');
             } finally {
                 setLoading(false);
             }

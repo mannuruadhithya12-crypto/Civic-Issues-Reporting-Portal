@@ -188,9 +188,13 @@ exports.getRealtime = async (req, res) => {
 
     const issuesPerHour = recentStats ? Math.round(recentStats.total / 24) : 0;
     
+    // Query genuine count of active users / on-duty personnel from MongoDB
+    const User = require('../models/User');
+    const activeUsers = await User.countDocuments({ status: { $in: ['active', undefined] } });
+
     res.json({
       feed: recentIssues,
-      activeUsers: Math.floor(Math.random() * 50) + 10, // Simulated active users for demo as we don't have socket/session tracking
+      activeUsers,
       issuesPerHour,
       systemStatus: 'Online'
     });

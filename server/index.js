@@ -1,5 +1,7 @@
 // server/index.js
 require("dotenv").config();
+const { validateEnv } = require("./config/validateEnv");
+validateEnv();
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
@@ -15,8 +17,26 @@ const User = require("./models/User");
 const Issue = require("./models/Issue");
 const { auth, admin } = require("./middleware/auth");
 
+const fs = require('fs');
+
 const app = express();
-app.use(cors());
+
+// Secure CORS configuration
+const rawOrigins = process.env.CORS_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000';
+const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g., server-to-server, health probes, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origin '${origin}' not permitted by CORS policy`));
+  },
+  credentials: true
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -26,13 +46,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// Configure persistent uploads directory
+const uploadDir = process.env.UPLOAD_DIR 
+  ? path.resolve(process.env.UPLOAD_DIR) 
+  : path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 // Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(uploadDir));
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -153,9 +181,35 @@ app.use(async (req, res, next) => {
 
 connectDB();
 
-// Health check
+// Health check endpoints
 app.get("/", (req, res) => {
   res.json({ message: "Civic Issues API running!" });
+});
+
+app.get("/api/health", (req, res) => {
+  const dbStatusMap = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+  const dbReadyState = mongoose.connection.readyState;
+  const isDbHealthy = dbReadyState === 1;
+
+  // Sanitized health check: operational status without exposing internal cluster topology or memory layout
+  const health = {
+    status: isDbHealthy ? 'UP' : 'DEGRADED',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+    environment: process.env.NODE_ENV || 'development',
+    database: {
+      status: dbStatusMap[dbReadyState] || 'unknown',
+      readyState: dbReadyState
+    },
+    version: '1.0.0'
+  };
+
+  res.status(isDbHealthy ? 200 : 503).json(health);
 });
 
 // --- Auth Routes ---
@@ -206,6 +260,10 @@ app.use("/api/announcements", announcementRoutes);
 // --- Support Routes ---
 const supportRoutes = require("./routes/support");
 app.use("/api/support", supportRoutes);
+
+// --- Location Routes (Centralized throttled Nominatim proxy) ---
+const locationRoutes = require("./routes/location");
+app.use("/api/location", locationRoutes);
 
 // Bulk update status (Admin only)
 app.put("/api/issues/bulk-update", auth, admin, async (req, res) => {
@@ -307,6 +365,18 @@ app.use("/api/reinforcement-learning", reinforcementLearningRoutes);
 const adaptiveRoutes = require('./routes/adaptiveRoutes');
 app.use("/api/adaptive-intelligence", adaptiveRoutes);
 
+
+// SPA client fallback for production deployments
+const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
+if (fs.existsSync(clientBuildPath)) {
+  app.use(express.static(clientBuildPath));
+  app.get('*', (req, res, next) => {
+    if (req.url.startsWith('/api') || req.url.startsWith('/uploads')) {
+      return next();
+    }
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {

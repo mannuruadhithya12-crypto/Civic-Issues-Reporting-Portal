@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ModelHealthPanel from './ModelHealthPanel';
 import PredictiveRiskMap from './PredictiveRiskMap';
 import PredictedRisks from './PredictedRisks';
+import api from '../../services/api';
 
 const PredictiveDashboard = ({ user }) => {
     const [overview, setOverview] = useState(null);
@@ -15,18 +16,12 @@ const PredictiveDashboard = ({ user }) => {
     const fetchOverview = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('token');
-            const res = await fetch('http://localhost:5000/api/predictions/overview', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await res.json();
-            if (res.ok) {
-                setOverview(data);
-            } else {
-                setError(data.error || 'Failed to load predictive overview');
+            const res = await api.get('/predictions/overview');
+            if (res.data) {
+                setOverview(res.data);
             }
         } catch (err) {
-            setError('Error connecting to prediction server.');
+            setError(err.response?.data?.error || 'Error connecting to prediction server.');
         } finally {
             setLoading(false);
         }

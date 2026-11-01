@@ -7,12 +7,13 @@ const auth = async (req, res, next) => {
         ? authHeader.slice(7).trim()
         : authHeader || req.query.token;
 
-    // Set demo mode data flag on request (for filtering demo data only, NOT for auth bypass)
+    // Demo mode cannot be enabled by an untrusted header or query param unless explicitly enabled in environment
+    const isDemoEnabled = process.env.ENABLE_DEMO_MODE === 'true';
     const modeHeader = req.headers['x-demo-mode'] || req.query.dataMode || req.query.demo;
-    req.isDemo = modeHeader === 'demo' || modeHeader === 'true';
+    req.isDemo = isDemoEnabled && (modeHeader === 'demo' || modeHeader === 'true');
 
     // Demo authentication bypass is strictly disabled unless explicitly permitted in isolated environments
-    const allowDemoAuth = process.env.ALLOW_DEMO_AUTH === 'true';
+    const allowDemoAuth = isDemoEnabled && process.env.ALLOW_DEMO_AUTH === 'true';
 
     if (!token) {
         if (req.isDemo && allowDemoAuth) {

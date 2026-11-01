@@ -15,6 +15,7 @@ router.get('/trends', intelligenceController.getTrends);
 router.get('/categories', intelligenceController.getCategories);
 router.get('/geographic', intelligenceController.getGeographic);
 router.get('/hotspots', intelligenceController.getHotspots);
+router.post('/hotspots/:hotspotId/explain', intelligenceController.explainHotspot);
 router.get('/priority', intelligenceController.getPriority);
 router.get('/duplicates', intelligenceController.getDuplicates);
 router.get('/predictions', intelligenceController.getPredictions);

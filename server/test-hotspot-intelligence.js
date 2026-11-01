@@ -302,9 +302,13 @@ async function runTestSuite() {
     // Temporarily stub Issue.find to reject
     const originalFind = Issue.find;
     Issue.find = () => ({
-      select: () => ({
-        limit: () => ({
-          lean: () => Promise.reject(new Error("Simulated Database I/O Failure"))
+      sort: () => ({
+        skip: () => ({
+          limit: () => ({
+            select: () => ({
+              lean: () => Promise.reject(new Error("Simulated Database I/O Failure"))
+            })
+          })
         })
       })
     });

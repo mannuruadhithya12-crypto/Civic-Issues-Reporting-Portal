@@ -7,6 +7,8 @@ const { getModelStatus, predictGeographicRisk } = require('../services/predictio
 const workloadService = require('../services/workloadService');
 const recommendationService = require('../services/recommendationService');
 const { calculateSLARisk } = require('../services/slaRiskService');
+const { explainHotspotIntelligence } = require('../services/gemini/hotspotIntelligence');
+const { logAudit } = require('../services/auditService');
 
 /**
  * Consolidated Intelligence Center Workspace Endpoint
@@ -566,6 +568,86 @@ exports.getHotspots = async (req, res) => {
     return res.status(500).json({
       success: false,
       error: "Server error calculating geospatial hotspots"
+    });
+  }
+};
+
+/**
+ * POST /api/admin/intelligence/hotspots/:hotspotId/explain
+ * Authenticated administrator endpoint providing Gemini-powered explanation
+ * of a DBSCAN geospatial hotspot grounded in verified backend metrics.
+ */
+exports.explainHotspot = async (req, res) => {
+  const { hotspotId } = req.params;
+  const { forceRefresh, ...filterParams } = req.body || {};
+
+  if (!hotspotId || typeof hotspotId !== 'string' || hotspotId.trim().length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Valid hotspotId parameter is required.'
+    });
+  }
+
+  try {
+    // 1. Recompute or retrieve actual verified hotspot records from MongoDB
+    const queryParams = {
+      ...req.query,
+      ...filterParams
+    };
+
+    const hotspotResult = await hotspotService.findHotspots(queryParams);
+    const targetHotspot = hotspotResult.hotspots.find(h => h.id === hotspotId.trim());
+
+    if (!targetHotspot) {
+      return res.status(404).json({
+        success: false,
+        message: `Hotspot '${hotspotId}' not found or no longer meets clustering threshold under active filters.`,
+        hotspotId
+      });
+    }
+
+    // 2. Generate or retrieve cached Gemini explanation
+    const result = await explainHotspotIntelligence({
+      hotspot: targetHotspot,
+      filters: queryParams,
+      forceRefresh: Boolean(forceRefresh)
+    });
+
+    // 3. Log audit telemetry
+    if (req.user) {
+      await logAudit({
+        req,
+        action: 'AI_HOTSPOT_EXPLANATION',
+        targetType: 'HOTSPOT',
+        targetId: targetHotspot.id,
+        targetLabel: `${targetHotspot.dominantDepartment} Hotspot Cluster`,
+        details: {
+          hotspotId: targetHotspot.id,
+          issueCount: targetHotspot.issueCount,
+          dominantDepartment: targetHotspot.dominantDepartment,
+          severityScore: targetHotspot.severityScore,
+          aiAvailable: result.available,
+          cached: result.cached,
+          modelVersion: result.modelVersion
+        }
+      }).catch(() => {});
+    }
+
+    return res.status(200).json(result);
+  } catch (err) {
+    if (err.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+        validationErrors: err.validationErrors || [err.message]
+      });
+    }
+
+    console.error(`[HotspotController] Explain error for ${hotspotId}:`, err);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error processing hotspot explanation',
+      error: err.message
     });
   }
 };

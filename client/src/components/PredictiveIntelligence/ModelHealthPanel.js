@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../../services/api';
 
 const ModelHealthPanel = ({ onModelUpdated }) => {
     const [status, setStatus] = useState(null);
@@ -13,14 +14,10 @@ const ModelHealthPanel = ({ onModelUpdated }) => {
     const fetchStatus = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('token');
-            const res = await fetch('http://localhost:5000/api/predictions/model-status', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await res.json();
-            setStatus(data);
+            const res = await api.get('/predictions/model-status');
+            setStatus(res.data);
         } catch (err) {
-            console.error(err);
+            console.error('fetchStatus error:', err);
         } finally {
             setLoading(false);
         }
@@ -32,22 +29,13 @@ const ModelHealthPanel = ({ onModelUpdated }) => {
         try {
             setTraining(true);
             setTrainLog("Training... Building dataset and evaluating chronological splits.");
-            const token = localStorage.getItem('token');
-            const res = await fetch('http://localhost:5000/api/predictions/train', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await res.json();
+            const res = await api.post('/predictions/train');
             
-            if (res.ok) {
-                setTrainLog(`Success: ${data.message}`);
-                setStatus(data.metadata); // The API returns metadata which matches status format
-                if (onModelUpdated) onModelUpdated();
-            } else {
-                setTrainLog(`Failed: ${data.message || data.error}`);
-            }
+            setTrainLog(`Success: ${res.data?.message || 'Model trained successfully'}`);
+            setStatus(res.data?.metadata); // The API returns metadata which matches status format
+            if (onModelUpdated) onModelUpdated();
         } catch (err) {
-            setTrainLog("Server error during training.");
+            setTrainLog(`Failed: ${err.response?.data?.message || err.response?.data?.error || "Server error during training."}`);
         } finally {
             setTraining(false);
         }

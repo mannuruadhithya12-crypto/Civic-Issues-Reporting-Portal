@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../../services/api';
+import { useDataMode } from '../../context/DataModeContext';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -46,8 +47,10 @@ function MapRecenter({ center, userLocation, taskLocation }) {
 
 const TaskDetails = () => {
     const { id } = useParams();
+    const { isDemo } = useDataMode();
     const [issue, setIssue] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState(null);
     const [completionNotes, setCompletionNotes] = useState('');
     const [proofImage, setProofImage] = useState(null);
     const [submitting, setSubmitting] = useState(false);
@@ -65,6 +68,7 @@ const TaskDetails = () => {
     }, [id]);
 
     const fetchIssueDetails = async () => {
+        setErrorMessage(null);
         try {
             const res = await api.get(`/issues/${id}`);
             if (res.data) {
@@ -74,24 +78,29 @@ const TaskDetails = () => {
             }
         } catch (err) {
             console.error("fetchIssueDetails notice:", err.message);
-            // Fallback task object for demo IDs (e.g. '00123')
-            setIssue({
-                _id: id || '00123',
-                title: 'Pothole Repair - Main Street',
-                description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-                location: 'Main Street, Near Metro Station',
-                locationName: 'Main Street, Near Metro Station',
-                department: 'Roads',
-                category: 'Pothole',
-                priority: 'high',
-                status: 'assigned',
-                createdAt: new Date().toISOString(),
-                sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000).toISOString(), isBreached: false },
-                images: [],
-                coordinates: {
-                    coordinates: [77.5946, 12.9716]
-                }
-            });
+            if (isDemo && (id === '00123' || !id)) {
+                // Isolated fallback task object ONLY for demo IDs in demo mode
+                setIssue({
+                    _id: id || '00123',
+                    title: 'Pothole Repair - Main Street',
+                    description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
+                    location: 'Main Street, Near Metro Station',
+                    locationName: 'Main Street, Near Metro Station',
+                    department: 'Roads',
+                    category: 'Pothole',
+                    priority: 'high',
+                    status: 'assigned',
+                    createdAt: new Date().toISOString(),
+                    sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000).toISOString(), isBreached: false },
+                    images: [],
+                    coordinates: {
+                        coordinates: [77.5946, 12.9716]
+                    }
+                });
+            } else {
+                setIssue(null);
+                setErrorMessage(err.response?.data?.message || "Task not found or unable to load details.");
+            }
         } finally {
             setLoading(false);
         }
@@ -223,10 +232,6 @@ const TaskDetails = () => {
             } else {
                 setIssue(prev => prev ? { ...prev, status: 'in_progress' } : null);
             }
-        } catch (err) {
-            console.error("handleStartWork notice:", err.message);
-            setIssue(prev => prev ? { ...prev, status: 'in_progress' } : null);
-        } finally {
             addWorkerNotification({
                 _id: `notif-start-${Date.now()}`,
                 type: 'task_updated',
@@ -235,14 +240,17 @@ const TaskDetails = () => {
                 read: false,
                 createdAt: new Date().toISOString(),
                 issue: {
-                    _id: id || '00123',
-                    title: issue?.title || 'Pothole Repair - Main Street',
-                    locationName: issue?.locationName || issue?.location || 'Main Street',
-                    department: issue?.department || 'Roads',
-                    priority: issue?.priority || 'high',
+                    _id: id,
+                    title: issue?.title || 'Civic Task',
+                    locationName: issue?.locationName || issue?.location || '',
+                    department: issue?.department || '',
+                    priority: issue?.priority || 'normal',
                     status: 'in_progress'
                 }
             });
+        } catch (err) {
+            console.error("handleStartWork error:", err);
+            alert(err.response?.data?.message || "Failed to start task. Please ensure you are assigned to this task.");
         }
     };
 
@@ -264,11 +272,6 @@ const TaskDetails = () => {
             } else {
                 setIssue(prev => prev ? { ...prev, status: 'resolved' } : null);
             }
-        } catch (err) {
-            console.error("handleCompleteWork notice:", err.message);
-            setIssue(prev => prev ? { ...prev, status: 'resolved' } : null);
-        } finally {
-            setSubmitting(false);
             addWorkerNotification({
                 _id: `notif-comp-${Date.now()}`,
                 type: 'task_completed',
@@ -277,14 +280,19 @@ const TaskDetails = () => {
                 read: false,
                 createdAt: new Date().toISOString(),
                 issue: {
-                    _id: id || '00123',
-                    title: issue?.title || 'Pothole Repair - Main Street',
-                    locationName: issue?.locationName || issue?.location || 'Main Street',
-                    department: issue?.department || 'Roads',
-                    priority: issue?.priority || 'high',
+                    _id: id,
+                    title: issue?.title || 'Civic Task',
+                    locationName: issue?.locationName || issue?.location || '',
+                    department: issue?.department || '',
+                    priority: issue?.priority || 'normal',
                     status: 'resolved'
                 }
             });
+        } catch (err) {
+            console.error("handleCompleteWork error:", err);
+            alert(err.response?.data?.message || "Failed to complete task. Please ensure requirements and work assignments are met.");
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -295,8 +303,11 @@ const TaskDetails = () => {
     );
 
     if (!issue) return (
-        <div className="w-page-wrapper flex justify-center items-center h-full">
-            <div className="text-xl text-red-600 font-semibold">Task not found</div>
+        <div className="w-page-wrapper flex flex-col justify-center items-center h-full" style={{ padding: '3rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</div>
+            <div className="text-xl text-red-600 font-semibold">{errorMessage || "Task not found"}</div>
+            <p style={{ marginTop: '0.5rem', color: '#64748b' }}>Please check the task ID or return to your tasks list.</p>
+            <Link to="/worker/tasks" style={{ marginTop: '1rem', display: 'inline-block', padding: '8px 16px', background: '#2563eb', color: 'white', borderRadius: '6px', textDecoration: 'none', fontWeight: 600 }}>Back to My Tasks</Link>
         </div>
     );
 
@@ -509,7 +520,7 @@ const TaskDetails = () => {
                                     <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--w-neutral-800)', marginBottom: '0.5rem' }}>Citizen Report (Before)</div>
                                     {issue.images && issue.images.length > 0 ? (
                                         <img 
-                                            src={issue.images[0].startsWith('http') ? issue.images[0] : `http://localhost:5000${issue.images[0]}`} 
+                                            src={issue.images[0].startsWith('http') ? issue.images[0] : (issue.images[0].startsWith('/') ? issue.images[0] : `/${issue.images[0]}`)} 
                                             alt="Before" 
                                             style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--w-neutral-200)' }} 
                                         />
@@ -534,7 +545,7 @@ const TaskDetails = () => {
                                         <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--w-neutral-800)', marginBottom: '0.5rem' }}>Your Resolution (After)</div>
                                         {issue.proofOfWork && issue.proofOfWork.length > 0 ? (
                                             <img 
-                                                src={issue.proofOfWork[0].startsWith('http') ? issue.proofOfWork[0] : `http://localhost:5000${issue.proofOfWork[0]}`} 
+                                                src={issue.proofOfWork[0].startsWith('http') ? issue.proofOfWork[0] : (issue.proofOfWork[0].startsWith('/') ? issue.proofOfWork[0] : `/${issue.proofOfWork[0]}`)} 
                                                 alt="After" 
                                                 style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--w-neutral-200)' }} 
                                             />

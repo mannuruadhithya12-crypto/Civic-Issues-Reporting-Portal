@@ -85,7 +85,7 @@ const markAsRead = async (req, res) => {
         const mongoose = require('mongoose');
         
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.json({ success: true, notification: { _id: req.params.id, read: true }, unreadCount: 0 });
+            return res.status(400).json({ success: false, message: "Invalid notification ID" });
         }
 
         const notification = await Notification.findOneAndUpdate(
@@ -116,6 +116,12 @@ const markAsRead = async (req, res) => {
 const markAsUnread = async (req, res) => {
     try {
         const userId = req.user._id || req.user.id;
+        const mongoose = require('mongoose');
+
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ success: false, message: "Invalid notification ID" });
+        }
+
         const notification = await Notification.findOneAndUpdate(
             { _id: req.params.id, user: userId },
             { read: false },

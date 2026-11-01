@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import { useDataMode } from '../context/DataModeContext';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -144,11 +145,12 @@ const WorkerDashboard = () => {
   const [resolutionNotes, setResolutionNotes] = useState('');
 
   const { user } = useContext(AuthContext);
+  const { isDemo } = useDataMode();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [isDemo]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -170,12 +172,15 @@ const WorkerDashboard = () => {
         res = {
           data: {
             stats: {
-              assignedTasks: assignedTasks || 12,
-              inProgress: inProgress || 5,
-              completed: completed || 8,
-              urgentTasks: urgentTasks || 2,
-              newTodayCount: 3,
-              completionRate: 42
+              assignedTasks: assignedTasks,
+              inProgress: inProgress,
+              completed: completed,
+              urgentTasks: urgentTasks,
+              newTodayCount: issues.filter(i => {
+                if (!i.createdAt) return false;
+                return new Date(i.createdAt).toDateString() === new Date().toDateString();
+              }).length,
+              completionRate: assignedTasks > 0 ? Math.round((completed / assignedTasks) * 100) : 0
             },
             todayTasks: issues,
             nearbyTasks: issues.filter(i => i && i.coordinates && Array.isArray(i.coordinates.coordinates) && i.coordinates.coordinates.length === 2),
@@ -311,7 +316,12 @@ const WorkerDashboard = () => {
     );
   };
 
-  const formattedDate = 'Tuesday, 7 Oct 2026';
+  const formattedDate = new Date().toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
 
   if (loading) {
     return (
@@ -366,24 +376,24 @@ const WorkerDashboard = () => {
 
   const rawStats = dashboardData?.stats;
   const stats = {
-    assignedTasks: rawStats?.assignedTasks || 12,
-    inProgress: rawStats?.inProgress || 5,
-    completed: rawStats?.completed || 8,
-    urgentTasks: rawStats?.urgentTasks || 2,
-    newTodayCount: rawStats?.newTodayCount || 3,
-    completionRate: rawStats?.completionRate || 42
+    assignedTasks: rawStats?.assignedTasks ?? 0,
+    inProgress: rawStats?.inProgress ?? 0,
+    completed: rawStats?.completed ?? 0,
+    urgentTasks: rawStats?.urgentTasks ?? 0,
+    newTodayCount: rawStats?.newTodayCount ?? 0,
+    completionRate: rawStats?.completionRate ?? 0
   };
 
   const fetchedTasks = dashboardData?.todayTasks || [];
-  const displayTasks = fetchedTasks.length > 0 ? fetchedTasks : sampleTasks;
+  const displayTasks = fetchedTasks.length > 0 ? fetchedTasks : (isDemo ? sampleTasks : []);
 
   const fetchedNearby = dashboardData?.nearbyTasks || [];
-  const displayNearby = fetchedNearby.length > 0 ? fetchedNearby : sampleTasks;
+  const displayNearby = fetchedNearby.length > 0 ? fetchedNearby : (isDemo ? sampleTasks : []);
 
   const fetchedActivity = dashboardData?.recentActivity || [];
-  const displayActivity = fetchedActivity.length > 0 ? fetchedActivity : sampleActivity;
+  const displayActivity = fetchedActivity.length > 0 ? fetchedActivity : (isDemo ? sampleActivity : []);
 
-  const workerName = user?.name || user?.username || dashboardData?.worker?.name || 'Ravi Kumar';
+  const workerName = user?.name || user?.username || dashboardData?.worker?.name || 'Worker';
 
   return (
     <div style={{ backgroundColor: '#F8FAFC', padding: '1.75rem 2rem 3rem 2rem', width: '100%', boxSizing: 'border-box' }}>

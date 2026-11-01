@@ -176,6 +176,10 @@ function IssueWizard() {
         });
       }
 
+      if (formData.aiAnalysis) {
+        payload.append('aiAnalysis', JSON.stringify(formData.aiAnalysis));
+      }
+
       const response = await api.post('/issues', payload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });

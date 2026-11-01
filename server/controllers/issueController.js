@@ -8,6 +8,7 @@ const duplicateService = require('../services/duplicateService');
 const issueStatusService = require('../services/issueStatusService');
 const slaService = require('../services/slaService');
 const notificationService = require('../services/notificationService');
+const { analyzeIssueReport } = require('../services/gemini/issueIntelligence');
 const { logAudit } = require('../services/auditService');
 const { emitDomainEvent } = require('../events/eventEmitter');
 
@@ -498,7 +499,16 @@ exports.startWork = async (req, res) => {
             return res.status(404).json({ message: "Issue not found" });
         }
 
-        if (issue.assignedTo && issue.assignedTo.toString() !== req.user.id && issue.assignedTo.toString() !== (req.user._id && req.user._id.toString())) {
+        const isWorker = req.user.role === 'worker';
+        const isAdmin = req.user.role === 'admin';
+        if (!isWorker && !isAdmin) {
+            return res.status(403).json({ message: "Not authorized. Field worker or administrator privileges required." });
+        }
+
+        const currentUserId = (req.user._id || req.user.id).toString();
+        const assignedId = issue.assignedTo ? (issue.assignedTo._id || issue.assignedTo).toString() : null;
+
+        if (isWorker && (!assignedId || assignedId !== currentUserId)) {
             return res.status(403).json({ message: "Not authorized. Only the assigned worker can start work." });
         }
 
@@ -544,8 +554,21 @@ exports.resolveIssue = async (req, res) => {
             return res.status(404).json({ message: "Issue not found" });
         }
 
-        if (issue.assignedTo && issue.assignedTo.toString() !== req.user.id && issue.assignedTo.toString() !== (req.user._id && req.user._id.toString())) {
+        const isWorker = req.user.role === 'worker';
+        const isAdmin = req.user.role === 'admin';
+        if (!isWorker && !isAdmin) {
+            return res.status(403).json({ message: "Not authorized. Field worker or administrator privileges required." });
+        }
+
+        const currentUserId = (req.user._id || req.user.id).toString();
+        const assignedId = issue.assignedTo ? (issue.assignedTo._id || issue.assignedTo).toString() : null;
+
+        if (isWorker && (!assignedId || assignedId !== currentUserId)) {
             return res.status(403).json({ message: "Not authorized. Only the assigned worker can resolve." });
+        }
+
+        if (issue.status !== 'resolved' && !issueStatusService.canTransition(issue.status, 'resolved')) {
+            return res.status(400).json({ message: `Cannot transition from ${issue.status} to resolved` });
         }
 
         const proofPath = req.file ? `/uploads/${req.file.filename}` : null;
@@ -609,7 +632,10 @@ exports.closeIssue = async (req, res) => {
         const issue = await Issue.findById(req.params.id);
         if (!issue) return res.status(404).json({ message: "Issue not found" });
 
-        if (issue.createdBy.toString() !== req.user.id && req.user.role !== 'admin') {
+        const creatorId = issue.createdBy?._id?.toString() || issue.createdBy?.toString();
+        const currentUserId = (req.user._id || req.user.id).toString();
+
+        if ((!creatorId || creatorId !== currentUserId) && req.user.role !== 'admin') {
             return res.status(403).json({ message: "Not authorized. Only the reporter or admin can close." });
         }
 
@@ -647,7 +673,10 @@ exports.reopenIssue = async (req, res) => {
         const issue = await Issue.findById(req.params.id);
         if (!issue) return res.status(404).json({ message: "Issue not found" });
 
-        if (issue.createdBy.toString() !== req.user.id && req.user.role !== 'admin') {
+        const creatorId = issue.createdBy?._id?.toString() || issue.createdBy?.toString();
+        const currentUserId = (req.user._id || req.user.id).toString();
+
+        if ((!creatorId || creatorId !== currentUserId) && req.user.role !== 'admin') {
             return res.status(403).json({ message: "Not authorized. Only the reporter or admin can reopen." });
         }
 
@@ -753,12 +782,111 @@ exports.checkDuplicates = async (req, res) => {
       return res.status(400).json(result);
     }
 
+    if (req.user) {
+      await logAudit({
+        req,
+        action: 'AI_DUPLICATE_CHECK',
+        targetType: 'DUPLICATE_EVALUATION',
+        details: {
+          hasDuplicates: result.hasDuplicates,
+          candidateCount: result.candidates?.length || 0,
+          aiAvailable: result.aiAvailable,
+          modelVersion: result.modelVersion
+        }
+      });
+    }
+
     res.json(result);
   } catch (err) {
     console.error("Error checking duplicates:", err);
     res.status(500).json({
       success: false,
       message: "Server error checking duplicates"
+    });
+  }
+};
+
+// In-memory sliding window rate limiter for /ai-assist: 20 reqs / min per user/IP
+const aiAssistRateLimit = new Map();
+const AI_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const AI_RATE_LIMIT_MAX = 20;
+
+exports.aiAssist = async (req, res) => {
+  try {
+    const userId = (req.user && (req.user._id || req.user.id)) || req.ip;
+    const now = Date.now();
+
+    // Check rate limit
+    let userRequests = aiAssistRateLimit.get(userId) || [];
+    userRequests = userRequests.filter(timestamp => now - timestamp < AI_RATE_LIMIT_WINDOW_MS);
+    if (userRequests.length >= AI_RATE_LIMIT_MAX) {
+      return res.status(429).json({
+        success: false,
+        message: 'Rate limit exceeded for AI assistance. Please wait a moment before trying again.'
+      });
+    }
+    userRequests.push(now);
+    aiAssistRateLimit.set(userId, userRequests);
+
+    const { title, description, department, category, language } = req.body || {};
+
+    if (!description || typeof description !== 'string' || description.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Description is required for AI assistance.'
+      });
+    }
+
+    if (description.length > 3000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Description exceeds maximum allowed length of 3000 characters.'
+      });
+    }
+
+    if (title && (typeof title !== 'string' || title.length > 200)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title must not exceed 200 characters.'
+      });
+    }
+
+    const result = await analyzeIssueReport({
+      title: title || '',
+      description: description.trim(),
+      department: department || '',
+      category: category || '',
+      language: language || 'en'
+    });
+
+    if (!result.available) {
+      return res.json({
+        success: false,
+        available: false,
+        message: result.message || 'AI issue assistance is currently unavailable.',
+        suggestions: null
+      });
+    }
+
+    const requestId = `ai_req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    return res.json({
+      success: true,
+      available: true,
+      requestId,
+      model: result.model,
+      original: result.original,
+      suggestions: result.suggestions,
+      limitations: result.suggestions.limitations || []
+    });
+
+  } catch (error) {
+    console.error('aiAssist controller error:', error.message || error);
+    // Never expose stack trace or API credentials
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to process AI issue assistance.',
+      error: error.code || 'AI_PROCESSING_ERROR'
     });
   }
 };

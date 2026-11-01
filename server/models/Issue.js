@@ -110,8 +110,14 @@ const issueSchema = new mongoose.Schema({
     isDemo: { type: Boolean, default: false }
 });
 
-// Add 2dsphere index for geospatial queries
+// Geospatial index for geographic cluster & hotspot queries
 issueSchema.index({ coordinates: '2dsphere' });
 
+// Compound indexes for high-frequency portal query patterns
+issueSchema.index({ createdBy: 1, createdAt: -1 });
+issueSchema.index({ assignedTo: 1, status: 1 });
+issueSchema.index({ status: 1, createdAt: -1 });
+issueSchema.index({ department: 1, status: 1, createdAt: -1 });
+issueSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Issue', issueSchema);

@@ -198,7 +198,7 @@ const LiveOperationsCenter = () => {
     };
 
     const handleExport = () => {
-        window.open(`http://localhost:5000/api/admin/command-center/export?format=csv`, '_blank');
+        window.open(`/api/admin/command-center/export?format=csv`, '_blank');
     };
 
     if (loading && !data) {

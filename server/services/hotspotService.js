@@ -221,7 +221,7 @@ function runDBSCAN(points, radiusMeters, minPoints) {
 /**
  * Calculates comprehensive geographic and civic metrics for a cluster of real issues
  */
-function calculateClusterMetrics(clusterPoints, index) {
+function calculateClusterMetrics(clusterPoints, index, dbscanEpsilonMeters = 200) {
   const count = clusterPoints.length;
 
   let sumLat = 0;
@@ -371,7 +371,9 @@ function calculateClusterMetrics(clusterPoints, index) {
     coordinates: [Math.round(centerLng * 1e6) / 1e6, Math.round(centerLat * 1e6) / 1e6], // GeoJSON [lng, lat]
     centerCoordinates: [Math.round(centerLat * 1e6) / 1e6, Math.round(centerLng * 1e6) / 1e6], // Leaflet [lat, lng]
     issueCount: count,
+    measuredRadiusMeters: radiusMeters,
     radiusMeters,
+    dbscanEpsilonMeters,
     boundingBox,
     boundingPolygon,
     dominantDepartment,
@@ -489,6 +491,18 @@ function validateHotspotParams(params) {
     validated.limit = 1000;
   }
 
+  // page: default 1, valid integer >= 1
+  if (params.page !== undefined && params.page !== '') {
+    const p = Number(params.page);
+    if (!Number.isInteger(p) || p < 1) {
+      errors.push('page must be an integer greater than or equal to 1');
+    } else {
+      validated.page = p;
+    }
+  } else {
+    validated.page = 1;
+  }
+
   return { errors, validated };
 }
 
@@ -504,7 +518,7 @@ async function findHotspots(queryParams = {}) {
     throw err;
   }
 
-  const { radiusMeters, minPoints, from, to, department, status, priority, limit } = validated;
+  const { radiusMeters, minPoints, from, to, department, status, priority, limit, page } = validated;
 
   // Build safe MongoDB filter matching genuine GeoJSON coordinates only
   const filter = {
@@ -529,10 +543,24 @@ async function findHotspots(queryParams = {}) {
     filter.priority = priority;
   }
 
-  // Fetch only required fields from database, up to bounded limit
+  // Deterministic count and query with bounded pagination
+  const totalMatchingRecords = await Issue.countDocuments(filter);
+  const totalPages = Math.ceil(totalMatchingRecords / limit) || 1;
+  const pagination = {
+    page,
+    limit,
+    totalMatchingRecords,
+    totalPages,
+    hasMore: page < totalPages,
+    isSubset: totalMatchingRecords > limit
+  };
+
+  // Fetch only required fields from database, up to bounded limit, sorted deterministically
   const rawIssues = await Issue.find(filter)
-    .select('_id title department priority status coordinates createdAt locationName aiAnalysis')
+    .sort({ createdAt: -1, _id: 1 })
+    .skip((page - 1) * limit)
     .limit(limit)
+    .select('_id title department priority status coordinates createdAt locationName aiAnalysis')
     .lean();
 
   // Validate coordinates and filter out invalid/corrupted records safely
@@ -574,8 +602,10 @@ async function findHotspots(queryParams = {}) {
         department: department || null,
         status: status || null,
         priority: priority || null,
-        limit
+        limit,
+        page
       },
+      pagination,
       summary: {
         totalHotspots: 0,
         totalIssuesInHotspots: 0,
@@ -590,7 +620,7 @@ async function findHotspots(queryParams = {}) {
   const { clusters, noise, coreCount, borderCount } = runDBSCAN(validPoints, radiusMeters, minPoints);
 
   // Compute metrics for each qualifying cluster
-  const hotspots = clusters.map((clusterPts, idx) => calculateClusterMetrics(clusterPts, idx));
+  const hotspots = clusters.map((clusterPts, idx) => calculateClusterMetrics(clusterPts, idx, radiusMeters));
 
   // Sort hotspots by issueCount descending, then severityScore descending
   hotspots.sort((a, b) => {
@@ -611,8 +641,10 @@ async function findHotspots(queryParams = {}) {
       department: department || null,
       status: status || null,
       priority: priority || null,
-      limit
+      limit,
+      page
     },
+    pagination,
     summary: {
       totalHotspots: hotspots.length,
       totalIssuesInHotspots,

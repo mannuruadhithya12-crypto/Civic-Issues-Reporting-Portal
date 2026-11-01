@@ -203,51 +203,13 @@ const getTaskById = async (req, res) => {
         }
 
         if (!issue) {
-            // Find first assigned issue for worker or matching title
-            issue = await Issue.findOne({ assignedTo: req.user._id })
-                .populate('createdBy', 'name email phone')
-                .populate('assignedTo', 'name email department');
-        }
-
-        if (!issue) {
-            // Clean fallback task object matching reference task #TASK-00123
-            return res.json({
-                _id: id || '00123',
-                title: 'Pothole Repair - Main Street',
-                description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-                location: 'Main Street, Near Metro Station',
-                locationName: 'Main Street, Near Metro Station',
-                department: 'Roads',
-                category: 'Pothole',
-                priority: 'high',
-                status: 'assigned',
-                createdAt: new Date(),
-                assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-                assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-                sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-                images: []
-            });
+            return res.status(404).json({ message: "Task not found" });
         }
 
         res.json(issue);
     } catch (err) {
         console.error("getTaskById error:", err);
-        res.json({
-            _id: req.params.id || '00123',
-            title: 'Pothole Repair - Main Street',
-            description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-            location: 'Main Street, Near Metro Station',
-            locationName: 'Main Street, Near Metro Station',
-            department: 'Roads',
-            category: 'Pothole',
-            priority: 'high',
-            status: 'assigned',
-            createdAt: new Date(),
-            assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-            assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-            sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-            images: []
-        });
+        res.status(500).json({ message: "Server error fetching task" });
     }
 };
 
@@ -264,23 +226,7 @@ const startTask = async (req, res) => {
         }
 
         if (!issue) {
-            return res.json({
-                _id: req.params.id || '00123',
-                title: 'Pothole Repair - Main Street',
-                description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-                location: 'Main Street, Near Metro Station',
-                locationName: 'Main Street, Near Metro Station',
-                department: 'Roads',
-                category: 'Pothole',
-                priority: 'high',
-                status: 'in_progress',
-                createdAt: new Date(),
-                assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-                assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-                sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-                images: [],
-                coordinates: { coordinates: [77.5946, 12.9716] }
-            });
+            return res.status(404).json({ message: "Task not found" });
         }
 
         if (issue.assignedTo && issue.assignedTo.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
@@ -324,23 +270,7 @@ const startTask = async (req, res) => {
         res.json(issue);
     } catch (err) {
         console.error("startTask error:", err);
-        res.json({
-            _id: req.params.id || '00123',
-            title: 'Pothole Repair - Main Street',
-            description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-            location: 'Main Street, Near Metro Station',
-            locationName: 'Main Street, Near Metro Station',
-            department: 'Roads',
-            category: 'Pothole',
-            priority: 'high',
-            status: 'in_progress',
-            createdAt: new Date(),
-            assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-            assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-            sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-            images: [],
-            coordinates: { coordinates: [77.5946, 12.9716] }
-        });
+        res.status(500).json({ message: "Server error starting task" });
     }
 };
 
@@ -360,26 +290,7 @@ const completeTask = async (req, res) => {
         const resolutionNotes = req.body.resolutionNotes || req.body.notes || 'Task completed successfully.';
 
         if (!issue) {
-            return res.json({
-                _id: req.params.id || '00123',
-                title: 'Pothole Repair - Main Street',
-                description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-                location: 'Main Street, Near Metro Station',
-                locationName: 'Main Street, Near Metro Station',
-                department: 'Roads',
-                category: 'Pothole',
-                priority: 'high',
-                status: 'resolved',
-                resolutionProof: proofPath || '/uploads/sample_proof.jpg',
-                resolutionNotes: resolutionNotes,
-                proofOfWork: proofPath ? [proofPath] : ['/uploads/sample_proof.jpg'],
-                createdAt: new Date(),
-                assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-                assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-                sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-                images: [],
-                coordinates: { coordinates: [77.5946, 12.9716] }
-            });
+            return res.status(404).json({ message: "Task not found" });
         }
 
         if (issue.assignedTo && issue.assignedTo.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
@@ -428,24 +339,7 @@ const completeTask = async (req, res) => {
         res.json(issue);
     } catch (err) {
         console.error("completeTask error:", err);
-        res.json({
-            _id: req.params.id || '00123',
-            title: 'Pothole Repair - Main Street',
-            description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-            location: 'Main Street, Near Metro Station',
-            locationName: 'Main Street, Near Metro Station',
-            department: 'Roads',
-            category: 'Pothole',
-            priority: 'high',
-            status: 'resolved',
-            resolutionNotes: req.body.notes || 'Task completed successfully',
-            createdAt: new Date(),
-            assignedAt: new Date(Date.now() - 3 * 3600 * 1000),
-            assignedBy: { name: 'Municipal Admin', email: 'admin@civic.gov' },
-            sla: { dueAt: new Date(Date.now() + 5 * 3600 * 1000), targetHours: 24, isBreached: false },
-            images: [],
-            coordinates: { coordinates: [77.5946, 12.9716] }
-        });
+        res.status(500).json({ message: "Server error completing task" });
     }
 };
 
@@ -462,15 +356,7 @@ const uploadEvidence = async (req, res) => {
         }
 
         if (!issue) {
-            const imagePath = req.file ? `/uploads/${req.file.filename}` : '/uploads/sample_proof.jpg';
-            return res.json({
-                _id: req.params.id || '00123',
-                title: 'Pothole Repair - Main Street',
-                description: 'You have been assigned a new task: Pothole Repair - Main Street. Please review the details and start working on this task.',
-                resolutionProof: imagePath,
-                proofOfWork: [imagePath],
-                status: 'in_progress'
-            });
+            return res.status(404).json({ message: "Task not found" });
         }
 
         if (issue.assignedTo && issue.assignedTo.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
@@ -497,10 +383,7 @@ const uploadEvidence = async (req, res) => {
         res.json(issue);
     } catch (err) {
         console.error("uploadEvidence error:", err);
-        res.json({
-            _id: req.params.id || '00123',
-            status: 'in_progress'
-        });
+        res.status(500).json({ message: "Server error uploading evidence" });
     }
 };
 

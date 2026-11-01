@@ -192,19 +192,42 @@ function Step5Review({
               marginBottom: candidates.length > 1 ? '10px' : '0'
             }}
           >
-            <div>
+              <div>
               <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a', marginBottom: '4px' }}>
                 {topMatch.title}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#64748b' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#64748b', flexWrap: 'wrap' }}>
                 <span style={{ background: '#f1f5f9', color: '#334155', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>
                   {topMatch.category || topMatch.department}
                 </span>
                 <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', textTransform: 'capitalize' }}>
                   Status: {topMatch.status || 'Reported'}
                 </span>
+                {topMatch.semanticRelationship && (
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontWeight: '700',
+                    backgroundColor: topMatch.semanticRelationship === 'same_issue' ? '#dcfce7' : (topMatch.semanticRelationship === 'related_issue' ? '#e0f2fe' : '#f1f5f9'),
+                    color: topMatch.semanticRelationship === 'same_issue' ? '#166534' : (topMatch.semanticRelationship === 'related_issue' ? '#0369a1' : '#475569')
+                  }}>
+                    {topMatch.semanticRelationship === 'same_issue' ? 'Identical Incident' : (topMatch.semanticRelationship === 'related_issue' ? 'Related Context' : 'Distinct Incident')}
+                  </span>
+                )}
                 <span>• {distMeters}m from your pin</span>
               </div>
+
+              {((topMatch.matchingConcepts && topMatch.matchingConcepts.length > 0) || (topMatch.semanticEvidence && topMatch.semanticEvidence.length > 0)) && (
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#1e40af', backgroundColor: '#eff6ff', padding: '6px 10px', borderRadius: '8px' }}>
+                  <strong>Why reports appear related:</strong> {topMatch.matchingConcepts?.length ? topMatch.matchingConcepts.join(', ') : topMatch.semanticEvidence[0]}
+                </div>
+              )}
+
+              {topMatch.contradictingConcepts && topMatch.contradictingConcepts.length > 0 && (
+                <div style={{ marginTop: '6px', fontSize: '11px', color: '#991b1b', backgroundColor: '#fef2f2', padding: '6px 10px', borderRadius: '8px' }}>
+                  <strong>Differences between reports:</strong> {topMatch.contradictingConcepts.join(', ')}
+                </div>
+              )}
             </div>
 
             <a
@@ -250,11 +273,35 @@ function Step5Review({
                     fontSize: '12px'
                   }}
                 >
-                  <div>
-                    <span style={{ fontWeight: '700', color: '#0f172a' }}>{cand.title}</span>
-                    <span style={{ color: '#64748b', marginLeft: '8px' }}>
-                      ({Math.round((cand.confidenceScore || cand.similarityScore || 0) * 100)}% match, ~{Math.round(cand.distanceMeters || 0)}m away)
-                    </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: '700', color: '#0f172a' }}>{cand.title}</span>
+                      <span style={{ color: '#64748b' }}>
+                        ({Math.round((cand.confidenceScore || cand.similarityScore || 0) * 100)}% match, ~{Math.round(cand.distanceMeters || 0)}m away)
+                      </span>
+                      {cand.semanticRelationship && (
+                        <span style={{
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          fontSize: '10px',
+                          fontWeight: '700',
+                          backgroundColor: cand.semanticRelationship === 'same_issue' ? '#dcfce7' : (cand.semanticRelationship === 'related_issue' ? '#e0f2fe' : '#f1f5f9'),
+                          color: cand.semanticRelationship === 'same_issue' ? '#166534' : (cand.semanticRelationship === 'related_issue' ? '#0369a1' : '#475569')
+                        }}>
+                          {cand.semanticRelationship === 'same_issue' ? 'Identical' : (cand.semanticRelationship === 'related_issue' ? 'Related' : 'Distinct')}
+                        </span>
+                      )}
+                    </div>
+                    {cand.matchingConcepts && cand.matchingConcepts.length > 0 && (
+                      <div style={{ fontSize: '11px', color: '#1e40af', marginTop: '2px' }}>
+                        Related concepts: {cand.matchingConcepts.slice(0, 2).join(', ')}
+                      </div>
+                    )}
+                    {cand.contradictingConcepts && cand.contradictingConcepts.length > 0 && (
+                      <div style={{ fontSize: '11px', color: '#991b1b', marginTop: '2px' }}>
+                        Differences: {cand.contradictingConcepts.slice(0, 2).join(', ')}
+                      </div>
+                    )}
                   </div>
                   <a
                     href={`/issues/${cand.issueId}`}

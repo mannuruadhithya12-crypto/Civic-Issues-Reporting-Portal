@@ -1,0 +1,261 @@
+[
+  {
+    "id": "BENCH-01",
+    "name": "Same Issue Different Wording - Crater vs Pothole",
+    "scenarioCategory": "same_issue_different_wording",
+    "target": {
+      "title": "Huge road crater damaging tires near Metro Pillar 42",
+      "description": "Massive deep hole in the middle of the road right in front of metro pillar 42. Multiple two-wheelers slipping and car rims getting bent.",
+      "department": "Roads",
+      "latitude": 12.9716,
+      "longitude": 77.5946
+    },
+    "candidates": [
+      {
+        "id": "CAND-01",
+        "title": "Dangerous pothole on main road by pillar 42",
+        "description": "Severe asphalt depression near metro pillar 42 causing major traffic slowdown and hazard for bikers.",
+        "department": "Roads",
+        "latitude": 12.9717,
+        "longitude": 77.5947,
+        "distanceMeters": 15
+      }
+    ],
+    "groundTruth": {
+      "CAND-01": {
+        "isDuplicate": true,
+        "semanticRelationship": "same_issue"
+      }
+    }
+  },
+  {
+    "id": "BENCH-02",
+    "name": "Same Location Different Issue - Streetlight vs Garbage",
+    "scenarioCategory": "same_location_different_issue",
+    "target": {
+      "title": "Dark street due to broken streetlight at Central Park Gate 2",
+      "description": "Streetlight pole number 14 outside Central Park Gate 2 has been dark for three consecutive nights. Area is completely dark and unsafe for pedestrians.",
+      "department": "Electricity",
+      "latitude": 12.9352,
+      "longitude": 77.6245
+    },
+    "candidates": [
+      {
+        "id": "CAND-02",
+        "title": "Overflowing waste dumpster outside Central Park Gate 2",
+        "description": "Garbage bin overflowing onto sidewalk next to Gate 2 entrance. Stray animals scattering trash across the footpath.",
+        "department": "Waste",
+        "latitude": 12.9352,
+        "longitude": 77.6245,
+        "distanceMeters": 0
+      }
+    ],
+    "groundTruth": {
+      "CAND-02": {
+        "isDuplicate": false,
+        "semanticRelationship": "different_issue"
+      }
+    }
+  },
+  {
+    "id": "BENCH-03",
+    "name": "Similar Wording Distant Location - Indiranagar vs Whitefield",
+    "scenarioCategory": "similar_wording_distant_location",
+    "target": {
+      "title": "Severe pothole near 100ft road junction",
+      "description": "Deep asphalt pothole near 100ft road junction causing severe vehicular vibration and risk of accidents.",
+      "department": "Roads",
+      "latitude": 12.9784,
+      "longitude": 77.6412
+    },
+    "candidates": [
+      {
+        "id": "CAND-03",
+        "title": "Severe pothole near 100ft road junction",
+        "description": "Deep asphalt pothole near 100ft road junction causing severe vehicular vibration and risk of accidents.",
+        "department": "Roads",
+        "latitude": 12.9698,
+        "longitude": 77.7499,
+        "distanceMeters": 11800
+      }
+    ],
+    "groundTruth": {
+      "CAND-03": {
+        "isDuplicate": false,
+        "semanticRelationship": "different_issue"
+      }
+    }
+  },
+  {
+    "id": "BENCH-04",
+    "name": "Related Distinct Complaints - Road Repair vs Pothole",
+    "scenarioCategory": "related_distinct_complaints",
+    "target": {
+      "title": "Loose gravel left behind after road patchwork",
+      "description": "Contractors filled a trench yesterday on 4th cross, but left piles of loose gravel and stones on the road causing two-wheeler skidding.",
+      "department": "Roads",
+      "latitude": 12.9250,
+      "longitude": 77.5810
+    },
+    "candidates": [
+      {
+        "id": "CAND-04",
+        "title": "Pothole needing repair on 4th cross road",
+        "description": "Pothole in the road tarmac requires urgent bitumen asphalt filling on 4th cross.",
+        "department": "Roads",
+        "latitude": 12.9251,
+        "longitude": 77.5811,
+        "distanceMeters": 16
+      }
+    ],
+    "groundTruth": {
+      "CAND-04": {
+        "isDuplicate": false,
+        "semanticRelationship": "related_issue"
+      }
+    }
+  },
+  {
+    "id": "BENCH-05",
+    "name": "Same Issue With Incomplete Descriptions",
+    "scenarioCategory": "same_issue_incomplete_descriptions",
+    "target": {
+      "title": "Water pipe leak",
+      "description": "Clean drinking water gushing from broken pipe under pavement near bakery.",
+      "department": "Water",
+      "latitude": 12.9121,
+      "longitude": 77.6012
+    },
+    "candidates": [
+      {
+        "id": "CAND-05",
+        "title": "Pipe burst near Iyengar bakery",
+        "description": "Pavement pipeline burst, clean water flooding the street opposite bakery.",
+        "department": "Water",
+        "latitude": 12.9122,
+        "longitude": 77.6013,
+        "distanceMeters": 14
+      }
+    ],
+    "groundTruth": {
+      "CAND-05": {
+        "isDuplicate": true,
+        "semanticRelationship": "same_issue"
+      }
+    }
+  },
+  {
+    "id": "BENCH-06",
+    "name": "Different Departments - Live Wire vs Overgrown Trees",
+    "scenarioCategory": "different_departments",
+    "target": {
+      "title": "Live electrical wire dangling low over pedestrian sidewalk",
+      "description": "Sparking overhead electric cable fell and is dangling 5 feet above the footpath outside building 45.",
+      "department": "Electricity",
+      "latitude": 12.9388,
+      "longitude": 77.6180
+    },
+    "candidates": [
+      {
+        "id": "CAND-06",
+        "title": "Overgrown tree branches touching building 45",
+        "description": "Large tree branches need pruning as they are encroaching private balcony of building 45.",
+        "department": "Parks",
+        "latitude": 12.9389,
+        "longitude": 77.6181,
+        "distanceMeters": 15
+      }
+    ],
+    "groundTruth": {
+      "CAND-06": {
+        "isDuplicate": false,
+        "semanticRelationship": "different_issue"
+      }
+    }
+  },
+  {
+    "id": "BENCH-07",
+    "name": "Missing Coordinates Validation",
+    "scenarioCategory": "missing_coordinates",
+    "target": {
+      "title": "Clogged stormwater drain flooding corner",
+      "description": "Drain choke up causing rainwater pooling.",
+      "department": "Water",
+      "latitude": null,
+      "longitude": null
+    },
+    "candidates": [
+      {
+        "id": "CAND-07",
+        "title": "Clogged storm drain on corner",
+        "description": "Water logging due to blocked drain.",
+        "department": "Water",
+        "latitude": 12.9300,
+        "longitude": 77.6100,
+        "distanceMeters": null
+      }
+    ],
+    "groundTruth": {
+      "CAND-07": {
+        "isDuplicate": false,
+        "semanticRelationship": "uncertain"
+      }
+    }
+  },
+  {
+    "id": "BENCH-08",
+    "name": "Multiple Nearby Candidates - Tri-Candidate Disambiguation",
+    "scenarioCategory": "multiple_nearby_candidates",
+    "target": {
+      "title": "Foul sewage water leaking onto road from manhole",
+      "description": "Black smelly sewage overflowing from blocked manhole in front of house 12B, flooding both sides of residential lane.",
+      "department": "Sanitation",
+      "latitude": 12.9550,
+      "longitude": 77.5750
+    },
+    "candidates": [
+      {
+        "id": "CAND-08A",
+        "title": "Sewage manhole overflow outside house 12B",
+        "description": "Blocked chamber spilling contaminated wastewater on the street at house 12B.",
+        "department": "Sanitation",
+        "latitude": 12.9551,
+        "longitude": 77.5751,
+        "distanceMeters": 15
+      },
+      {
+        "id": "CAND-08B",
+        "title": "Streetlight pole flickering outside house 14",
+        "description": "Light blinks intermittently at night.",
+        "department": "Electricity",
+        "latitude": 12.9552,
+        "longitude": 77.5749,
+        "distanceMeters": 25
+      },
+      {
+        "id": "CAND-08C",
+        "title": "Underground drain cleaning work underway",
+        "description": "Sanitation crew desilting nearby main canal line.",
+        "department": "Sanitation",
+        "latitude": 12.9553,
+        "longitude": 77.5752,
+        "distanceMeters": 38
+      }
+    ],
+    "groundTruth": {
+      "CAND-08A": {
+        "isDuplicate": true,
+        "semanticRelationship": "same_issue"
+      },
+      "CAND-08B": {
+        "isDuplicate": false,
+        "semanticRelationship": "different_issue"
+      },
+      "CAND-08C": {
+        "isDuplicate": false,
+        "semanticRelationship": "related_issue"
+      }
+    }
+  }
+]
+

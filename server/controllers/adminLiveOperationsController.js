@@ -74,11 +74,11 @@ exports.getLiveOperationsSummary = async (req, res) => {
         const criticalOps = activeOps.filter(i => ['urgent', 'high'].includes(i.priority) || i.sla?.isBreached);
 
         const kpis = {
-            activeOperations: { count: activeOps.length, sparkline: [10, 14, 18, 22, 28, 32, activeOps.length], trend: '+14% vs last week' },
-            inProgress: { count: inProgressOps.length, sparkline: [5, 8, 12, 15, 19, 22, inProgressOps.length], trend: '+8% vs last week' },
-            fieldVehicles: { count: FIELD_VEHICLES.filter(v => v.status === 'Active').length, sparkline: [3, 4, 4, 5, 5, 6, 6], trend: '+12% vs last week' },
-            activeWorkers: { count: activeWorkersCount, sparkline: [12, 15, 14, 18, 20, 22, activeWorkersCount], trend: '+5% vs last week' },
-            criticalOperations: { count: criticalOps.length, sparkline: [8, 6, 9, 5, 4, 3, criticalOps.length], trend: '-25% vs last week' }
+            activeOperations: { count: activeOps.length, sparkline: [0, 0, 0, 0, 0, 0, activeOps.length], trend: `${activeOps.length} active` },
+            inProgress: { count: inProgressOps.length, sparkline: [0, 0, 0, 0, 0, 0, inProgressOps.length], trend: `${inProgressOps.length} in progress` },
+            fieldVehicles: { count: FIELD_VEHICLES.filter(v => v.status === 'Active').length, sparkline: [0, 0, 0, 0, 0, 0, FIELD_VEHICLES.filter(v => v.status === 'Active').length], trend: 'Operational' },
+            activeWorkers: { count: activeWorkersCount, sparkline: [0, 0, 0, 0, 0, 0, activeWorkersCount], trend: `${activeWorkersCount} on duty` },
+            criticalOperations: { count: criticalOps.length, sparkline: [0, 0, 0, 0, 0, 0, criticalOps.length], trend: `${criticalOps.length} critical` }
         };
 
         // 2. Donut Chart Breakdown - Operation Status
@@ -260,29 +260,55 @@ exports.getLiveOperationsSummary = async (req, res) => {
  */
 exports.createOperation = async (req, res) => {
     try {
-        const { title, description, location, department, priority, assignedTo } = req.body;
+        const { title, description, location, department, priority, assignedTo, coordinates } = req.body;
         if (!title || !description || !location) {
             return res.status(400).json({ success: false, message: 'Title, description, and location are required' });
+        }
+
+        let pointCoords = undefined;
+        if (coordinates) {
+            let lng = null, lat = null;
+            if (Array.isArray(coordinates) && coordinates.length === 2) {
+                lng = Number(coordinates[0]);
+                lat = Number(coordinates[1]);
+            } else if (coordinates.latitude != null && coordinates.longitude != null) {
+                lat = Number(coordinates.latitude);
+                lng = Number(coordinates.longitude);
+            } else if (coordinates.lat != null && coordinates.lng != null) {
+                lat = Number(coordinates.lat);
+                lng = Number(coordinates.lng);
+            }
+            if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                pointCoords = {
+                    type: 'Point',
+                    coordinates: [lng, lat]
+                };
+            }
         }
 
         const newIssue = new Issue({
             title,
             description,
             location,
+            locationName: location,
             department: department || 'Roads',
             priority: priority || 'normal',
             assignedTo: assignedTo || null,
             status: assignedTo ? 'assigned' : 'reported',
             createdBy: req.user._id,
             createdAt: new Date(),
-            coordinates: {
-                type: 'Point',
-                coordinates: [77.5946 + (Math.random() * 0.02 - 0.01), 12.9716 + (Math.random() * 0.02 - 0.01)]
-            }
+            coordinates: pointCoords
         });
 
         await newIssue.save();
-        await logAudit(req.user._id, 'CREATE_OPERATION', 'Issue', newIssue._id, `Created live operation: ${title}`);
+        await logAudit({
+            req,
+            action: 'CREATE_OPERATION',
+            targetType: 'Issue',
+            targetId: newIssue._id,
+            targetLabel: title,
+            details: { department, priority, location }
+        });
 
         res.json({ success: true, message: 'Operation created successfully', data: newIssue });
     } catch (err) {

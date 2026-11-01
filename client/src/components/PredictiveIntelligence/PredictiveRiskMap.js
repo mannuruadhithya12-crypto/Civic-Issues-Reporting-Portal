@@ -1,29 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Circle, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import api from '../../services/api';
 
 const PredictiveRiskMap = () => {
     const [predictions, setPredictions] = useState([]);
     const [error, setError] = useState(null);
 
-    // Default center (can be dynamic based on city bounds later)
-    const center = [28.6139, 77.2090]; 
+    // Dynamic center from predictions or municipal Bangalore default
+    const center = predictions.length > 0 && Array.isArray(predictions[0].location)
+        ? [predictions[0].location[0], predictions[0].location[1]]
+        : [12.9716, 77.5946]; 
 
     useEffect(() => {
         const fetchPredictions = async () => {
             try {
-                const token = localStorage.getItem('token');
-                const res = await fetch('http://localhost:5000/api/predictions/geographic', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    setPredictions(data);
-                } else {
-                    setError(data.error);
+                const res = await api.get('/predictions/geographic');
+                if (res.data) {
+                    setPredictions(res.data);
                 }
             } catch (err) {
-                setError('Failed to fetch predictions');
+                setError(err.response?.data?.error || 'Failed to fetch predictions');
             }
         };
 

@@ -174,60 +174,29 @@ const CommandCenter = ({ issues = [], workers = [], onRefresh }) => {
     // Export handler
     const handleExport = async () => {
         try {
-            window.open(`http://localhost:5000/api/admin/command-center/export?format=csv`, '_blank');
+            window.open(`/api/admin/command-center/export?format=csv`, '_blank');
         } catch (err) {
             console.error('Export failed:', err);
             alert('Failed to generate export file.');
         }
     };
 
-    // Derived counts or fallback values
+    // Derived counts or genuine default values (no synthetic fallbacks)
     const kpis = summary?.kpis || {
-        totalIssues: { value: issues.length || 248, trend: 12, sparkline: [180, 195, 210, 225, 230, 240, 248] },
-        highPriority: { value: issues.filter(i => i.priority === 'high' || i.priority === 'urgent').length || 36, trend: 8, sparkline: [25, 28, 30, 32, 34, 35, 36] },
-        resolved: { value: issues.filter(i => i.status === 'resolved' || i.status === 'closed').length || 182, trend: 25, sparkline: [120, 135, 150, 165, 172, 178, 182] },
-        activeWorkers: { value: workers.filter(w => w.dutyStatus === 'on_duty').length || 78, trend: 5, sparkline: [70, 72, 74, 75, 76, 77, 78] },
-        slaAtRisk: { value: 28, trend: -18, sparkline: [40, 38, 35, 32, 30, 29, 28] }
+        totalIssues: { value: issues.length, trend: 0, sparkline: issues.length ? [issues.length] : [] },
+        highPriority: { value: issues.filter(i => i.priority === 'high' || i.priority === 'urgent').length, trend: 0, sparkline: [] },
+        resolved: { value: issues.filter(i => i.status === 'resolved' || i.status === 'closed').length, trend: 0, sparkline: [] },
+        activeWorkers: { value: workers.filter(w => w.dutyStatus === 'on_duty').length, trend: 0, sparkline: [] },
+        slaAtRisk: { value: 0, trend: 0, sparkline: [] }
     };
 
-    const categoriesList = summary?.issueOverview?.categories?.length > 0 ? summary.issueOverview.categories : [
-        { name: 'Roads', count: 78, percentage: 31 },
-        { name: 'Waste', count: 62, percentage: 25 },
-        { name: 'Water', count: 41, percentage: 17 },
-        { name: 'Drainage', count: 28, percentage: 11 },
-        { name: 'Lighting', count: 21, percentage: 8 },
-        { name: 'Parks', count: 11, percentage: 4 },
-        { name: 'Other', count: 7, percentage: 3 }
-    ];
-
-    const slaData = summary?.slaCompliance || { overallPercentage: 88, withinSla: 218, atRisk: 28, breached: 12 };
-    const fieldOps = summary?.fieldOperations || { activeWorkers: 78, onBreak: 12, offDuty: 6, fieldVehicles: 24 };
-    const activityFeed = summary?.liveActivity?.length > 0 ? summary.liveActivity : [
-        { id: 1, icon: '🚨', title: 'New issue reported', subtitle: 'Pothole on Main Street', timestamp: new Date(Date.now() - 2 * 60000) },
-        { id: 2, icon: '👤', title: 'Worker assigned', subtitle: 'Drainage cleaning - Riverside Area', timestamp: new Date(Date.now() - 5 * 60000) },
-        { id: 3, icon: '⚡', title: 'Intervention started', subtitle: 'Street light upgrade - West End', timestamp: new Date(Date.now() - 12 * 60000) },
-        { id: 4, icon: '✅', title: 'Issue resolved', subtitle: 'Garbage collection - Central District', timestamp: new Date(Date.now() - 18 * 60000) },
-        { id: 5, icon: '💬', title: 'Citizen comment', subtitle: '#CC-1042 - Water supply issue', timestamp: new Date(Date.now() - 25 * 60000) },
-        { id: 6, icon: '⚠️', title: 'SLA risk alert', subtitle: '8 issues approaching SLA breach', timestamp: new Date(Date.now() - 32 * 60000) }
-    ];
-
-    const weatherData = summary?.weather || { temp: '28°C', condition: 'Partly Cloudy', humidity: '62%', wind: '12 km/h', airQuality: 'Good', rainChance: '10%' };
-
-    const recentIssuesList = summary?.recentIssues?.length > 0 ? summary.recentIssues : [
-        { id: '#CC-1045', title: 'Pothole on Main Street', category: 'Roads', location: 'Central District', priority: 'high', status: 'reported', createdAt: new Date(Date.now() - 2 * 60000) },
-        { id: '#CC-1044', title: 'Garbage collection missed', category: 'Waste', location: 'Riverside Area', priority: 'medium', status: 'assigned', createdAt: new Date(Date.now() - 18 * 60000) },
-        { id: '#CC-1043', title: 'Street light not working', category: 'Lighting', location: 'West End', priority: 'high', status: 'in_progress', createdAt: new Date(Date.now() - 60 * 60000) },
-        { id: '#CC-1042', title: 'Water supply interruption', category: 'Water', location: 'Eastwood', priority: 'medium', status: 'reported', createdAt: new Date(Date.now() - 120 * 60000) },
-        { id: '#CC-1041', title: 'Drainage overflow', category: 'Drainage', location: 'Green Park', priority: 'high', status: 'assigned', createdAt: new Date(Date.now() - 180 * 60000) }
-    ];
-
-    const activeWorkersList = summary?.activeWorkers?.length > 0 ? summary.activeWorkers : [
-        { id: '1', name: 'Rajesh Kumar', role: 'Field Supervisor', status: 'On Duty', rawStatus: 'on_duty', location: 'Central District' },
-        { id: '2', name: 'Priya Sharma', role: 'Sanitation Worker', status: 'On Duty', rawStatus: 'on_duty', location: 'Riverside Area' },
-        { id: '3', name: 'Amit Singh', role: 'Maintenance', status: 'On Duty', rawStatus: 'on_duty', location: 'West End' },
-        { id: '4', name: 'Sunita Devi', role: 'Technician', status: 'On Break', rawStatus: 'on_break', location: 'Eastwood' },
-        { id: '5', name: 'Vikram Patel', role: 'Driver', status: 'On Duty', rawStatus: 'on_duty', location: 'Green Park' }
-    ];
+    const categoriesList = summary?.issueOverview?.categories?.length > 0 ? summary.issueOverview.categories : [];
+    const slaData = summary?.slaCompliance || { overallPercentage: 100, withinSla: 0, atRisk: 0, breached: 0 };
+    const fieldOps = summary?.fieldOperations || { activeWorkers: workers.length, onBreak: 0, offDuty: 0, fieldVehicles: 0 };
+    const activityFeed = summary?.liveActivity?.length > 0 ? summary.liveActivity : [];
+    const weatherData = summary?.weather || { temp: '--°C', condition: 'Unavailable', humidity: '--%', wind: '--', airQuality: 'N/A', rainChance: '--' };
+    const recentIssuesList = summary?.recentIssues?.length > 0 ? summary.recentIssues : (issues.slice(0, 5));
+    const activeWorkersList = summary?.activeWorkers?.length > 0 ? summary.activeWorkers : (workers.slice(0, 5));
 
     const mapMarkers = summary?.mapMarkers || [];
 

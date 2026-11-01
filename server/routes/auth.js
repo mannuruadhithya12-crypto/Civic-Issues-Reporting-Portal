@@ -17,22 +17,20 @@ router.post('/register', async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    // Validate role
-    const validRoles = ['citizen', 'worker', 'admin'];
-    const assignedRole = validRoles.includes(role) ? role : 'citizen';
+    // Public self-registration only allows 'citizen' role to prevent privilege escalation
+    const assignedRole = 'citizen';
 
     user = new User({
       name,
       email: normalizedEmail,
       phone,
       password: hashedPassword,
-      role: assignedRole,
-      ...(assignedRole === 'worker' && department ? { department } : {})
+      role: assignedRole
     });
     
     await user.save();
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || 'secret', {
       expiresIn: process.env.JWT_EXPIRES_IN || '7d',
     });
 
@@ -61,32 +59,19 @@ router.post('/login', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    let user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email: normalizedEmail });
     
-    // Auto-create test/demo user if account does not exist
     if (!user) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const role = normalizedEmail.includes('admin') ? 'admin' : (normalizedEmail.includes('worker') ? 'worker' : 'citizen');
-      user = new User({
-        name: normalizedEmail.split('@')[0].toUpperCase(),
-        email: normalizedEmail,
-        password: hashedPassword,
-        role: role
-      });
-      await user.save();
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    if (user.status === 'deactivated') {
-      return res.status(403).json({ message: 'Account is deactivated. Please contact support.' });
+    if (user.status && user.status !== 'active') {
+      return res.status(403).json({ message: `Account is ${user.status}` });
     }
 
-    let isMatch = await bcrypt.compare(password, user.password);
-
-    // If password mismatch in dev environment, sync user password for seamless testing
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      user.password = await bcrypt.hash(password, 10);
-      await user.save();
-      isMatch = true;
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     user.lastLogin = new Date();

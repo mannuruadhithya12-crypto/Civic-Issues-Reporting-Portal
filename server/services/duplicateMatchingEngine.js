@@ -2,6 +2,7 @@
 'use strict';
 
 const Issue = require('../models/Issue');
+const { compareSemanticDuplicates } = require('./gemini/duplicateIntelligence');
 
 /**
  * Default weights and thresholds for duplicate detection heuristic scoring.
@@ -501,7 +502,121 @@ async function findDuplicateCandidates(params = {}) {
         }
     }
 
-    // Sort descending by similarity score
+    // Initial deterministic ranking (descending by score)
+    scoredCandidates.sort((a, b) => b.similarityScore - a.similarityScore);
+
+    // Hybrid Gemini Semantic Evaluation for top candidates
+    let semanticResult = null;
+    const hasSufficientContent = Boolean(
+        (title && title.trim().length >= 5) &&
+        (description && description.trim().length >= 10)
+    );
+    const enableSemantic = params.enableSemantic !== false && hasSufficientContent;
+
+    if (enableSemantic && scoredCandidates.length > 0) {
+        // Evaluate up to 5 top candidate issues within radius
+        const topCandidates = scoredCandidates.slice(0, 5).map(c => ({
+            id: String(c.issueId),
+            title: c.title,
+            description: c.description,
+            department: c.department,
+            distanceMeters: c.distanceMeters
+        }));
+
+        try {
+            semanticResult = await compareSemanticDuplicates({
+                targetIssue: {
+                    title,
+                    description,
+                    department: department || category,
+                    category: category || department
+                },
+                candidateIssues: topCandidates,
+                timeoutMs: params.semanticTimeoutMs,
+                geminiClient: params.geminiClient
+            });
+        } catch (err) {
+            console.warn(`[DuplicateMatchingEngine] Semantic evaluation fallback: ${err.message}`);
+            semanticResult = {
+                available: false,
+                comparisons: {},
+                model: null
+            };
+        }
+    }
+
+    // Blend semantic signals if available
+    for (const cand of scoredCandidates) {
+        const candId = String(cand.issueId);
+        const sem = semanticResult?.comparisons ? semanticResult.comparisons[candId] : null;
+
+        let finalScore = cand.similarityScore;
+        let semanticBoost = 0;
+
+        if (sem && semanticResult.available) {
+            cand.semanticRelationship = sem.semanticRelationship;
+            cand.sameUnderlyingIssue = sem.sameUnderlyingIssue;
+            cand.semanticEvidence = sem.evidence || [];
+            cand.contradictingConcepts = sem.contradictingConcepts || [];
+            cand.matchingConcepts = sem.matchingConcepts || [];
+
+            // Apply Gating & Semantic Blending Rules
+            if (cand.matchFactors.spatialProximity <= 0.05) {
+                // Distant / boundary proximity can NEVER be a duplicate
+                finalScore = Math.min(finalScore, 0.40);
+            } else if (cand.matchFactors.categoryMatch === 0.0) {
+                // Incompatible category can NEVER be a duplicate
+                finalScore = Math.min(finalScore, 0.35);
+            } else if (sem.semanticRelationship === 'same_issue' && sem.sameUnderlyingIssue) {
+                // Confirmed same physical issue -> apply bounded semantic boost (+0.20)
+                semanticBoost = 0.20;
+                finalScore = Math.min(1.0, finalScore + semanticBoost);
+                const conceptsStr = sem.matchingConcepts.length ? ` (${sem.matchingConcepts.slice(0, 3).join(', ')})` : '';
+                cand.reasons.push(`AI Semantic Match: Same underlying issue detected${conceptsStr}`);
+            } else if (sem.semanticRelationship === 'different_issue') {
+                // Distinct issue at same location -> suppress duplicate score
+                finalScore = Math.min(finalScore, 0.35);
+                cand.reasons.push('AI Semantic Analysis: Distinct civic problem identified');
+            } else if (sem.contradictingConcepts && sem.contradictingConcepts.length > 0) {
+                // Contradicting concepts -> penalize score
+                finalScore = Math.min(finalScore, 0.40);
+                cand.reasons.push(`AI Semantic Analysis: Conflicting details detected (${sem.contradictingConcepts.slice(0, 2).join(', ')})`);
+            } else if (sem.semanticRelationship === 'related_issue') {
+                // Related issue -> cap strictly below duplicate threshold (0.60)
+                finalScore = Math.min(finalScore, 0.55);
+                cand.reasons.push('AI Semantic Analysis: Related context, but separate physical issue');
+            } else if (sem.semanticRelationship === 'uncertain') {
+                if (sem.uncertaintyReason) {
+                    cand.reasons.push(`AI Semantic Analysis: Inconclusive (${sem.uncertaintyReason})`);
+                }
+            }
+
+            cand.similarityScore = Math.round(finalScore * 100) / 100;
+            cand.matchFactors = {
+                ...cand.matchFactors,
+                semanticBoost
+            };
+            cand.spatialProximity = cand.matchFactors.spatialProximity;
+            cand.textualSimilarity = cand.matchFactors.textualSimilarity;
+            cand.semanticSimilarity = null; // Strictly null: numeric semantic similarity is not fabricated
+            cand.aiAvailable = true;
+            cand.modelVersion = semanticResult.model;
+        } else {
+            // Pure deterministic fallback
+            cand.semanticRelationship = null;
+            cand.sameUnderlyingIssue = null;
+            cand.semanticEvidence = [];
+            cand.contradictingConcepts = [];
+            cand.matchingConcepts = [];
+            cand.spatialProximity = cand.matchFactors.spatialProximity;
+            cand.textualSimilarity = cand.matchFactors.textualSimilarity;
+            cand.semanticSimilarity = null;
+            cand.aiAvailable = false;
+            cand.modelVersion = null;
+        }
+    }
+
+    // Re-sort descending by final similarity score
     scoredCandidates.sort((a, b) => b.similarityScore - a.similarityScore);
 
     const duplicateMatches = scoredCandidates.filter(c => c.similarityScore >= ENGINE_CONFIG.DUPLICATE_THRESHOLD);
@@ -512,7 +627,10 @@ async function findDuplicateCandidates(params = {}) {
         count: duplicateMatches.length,
         threshold: ENGINE_CONFIG.DUPLICATE_THRESHOLD,
         candidates: scoredCandidates,
-        totalChecked: dbCandidates.length
+        totalChecked: dbCandidates.length,
+        aiAvailable: semanticResult ? semanticResult.available : false,
+        modelVersion: semanticResult ? semanticResult.model : null,
+        semanticEvaluatedCount: semanticResult ? semanticResult.evaluatedCount : 0
     };
 }
 

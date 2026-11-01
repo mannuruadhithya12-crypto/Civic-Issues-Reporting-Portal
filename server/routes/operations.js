@@ -4,7 +4,9 @@ const router = express.Router();
 const operationsController = require('../controllers/operationsController');
 const { auth, admin } = require('../middleware/auth');
 
-router.get('/stream', auth, operationsController.getLiveStream);
-router.get('/events', auth, admin, operationsController.getRecentEvents);
+router.use(auth, admin);
+
+router.get('/stream', operationsController.getLiveStream);
+router.get('/events', operationsController.getRecentEvents);
 
 module.exports = router;

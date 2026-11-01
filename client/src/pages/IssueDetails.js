@@ -142,7 +142,7 @@ function IssueDetails() {
           <div className="citizen-card-box" style={{ padding: 0, overflow: 'hidden' }}>
             {issue.images && issue.images.length > 0 ? (
               <img 
-                src={issue.images[0].startsWith('http') ? issue.images[0] : `http://localhost:5000${issue.images[0]}`} 
+                src={issue.images[0].startsWith('http') ? issue.images[0] : (issue.images[0].startsWith('/') ? issue.images[0] : `/${issue.images[0]}`)} 
                 alt={issue.title} 
                 style={{ width: '100%', height: '320px', objectFit: 'cover' }} 
               />

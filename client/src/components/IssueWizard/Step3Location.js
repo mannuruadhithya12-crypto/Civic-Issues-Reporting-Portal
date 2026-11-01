@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import api from '../../services/api';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -49,6 +50,9 @@ function MapUpdater({ center }) {
   return null;
 }
 
+const clientGeocodeCache = new Map();
+const getCoordKey = (lat, lng) => `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
+
 function Step3Location({
   formData,
   updateFormData,
@@ -79,13 +83,25 @@ function Step3Location({
       coordinates: { lat: position.lat, lng: position.lng }
     });
 
+    const key = getCoordKey(position.lat, position.lng);
+    if (clientGeocodeCache.has(key)) {
+      updateFormData({
+        locationName: clientGeocodeCache.get(key)
+      });
+      return;
+    }
+
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}`);
-        const data = await res.json();
-        if (data && data.display_name) {
+        const res = await api.get('/location/reverse', {
+          params: { lat: position.lat, lng: position.lng }
+        });
+        const data = res.data;
+        if (data && (data.display_name || data.address)) {
+          const locName = data.display_name || data.address;
+          clientGeocodeCache.set(key, locName);
           updateFormData({
-            locationName: data.display_name
+            locationName: locName
           });
         }
       } catch (err) {
@@ -101,8 +117,10 @@ function Step3Location({
     if (!searchQuery.trim()) return;
     setIsSearching(true);
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery.trim())}`);
-      const data = await res.json();
+      const res = await api.get('/location/search', {
+        params: { q: searchQuery.trim() }
+      });
+      const data = res.data;
       if (data && data.length > 0) {
         const lat = parseFloat(data[0].lat);
         const lng = parseFloat(data[0].lon);
@@ -293,7 +311,9 @@ function Step3Location({
       {(() => {
         const state = duplicateState?.status || (checkingDuplicates ? 'loading' : (duplicateResult?.hasDuplicates ? 'candidates' : 'idle'));
         const data = duplicateState?.data || duplicateResult;
-        const topMatch = data?.topMatch;
+        const topMatch = data?.topMatch || (data?.candidates && data.candidates.length > 0 ? data.candidates[0] : null);
+        const matchPct = topMatch ? Math.round((topMatch.confidenceScore || topMatch.similarityScore || 0) * 100) : 0;
+        const distM = topMatch ? Math.round(topMatch.distanceMeters || 0) : 0;
 
         if (state === 'loading') {
           return (
@@ -335,7 +355,7 @@ function Step3Location({
                 backgroundColor: '#fffbeb',
                 border: '1px solid #fef08a',
                 borderRadius: '14px',
-                padding: '12px 16px',
+                padding: '14px 18px',
                 marginBottom: '16px',
                 display: 'flex',
                 alignItems: 'flex-start',
@@ -348,11 +368,42 @@ function Step3Location({
                 </svg>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#92400e', marginBottom: '2px' }}>
-                  Nearby Similar Report Found (~{Math.round(topMatch.distanceMeters)}m away)
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#92400e' }}>
+                    Nearby Similar Report Found (~{distM}m away)
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: '#fef3c7', color: '#92400e' }}>
+                    {matchPct}% Match
+                  </span>
                 </div>
-                <div style={{ fontSize: '12px', color: '#b45309', lineHeight: '1.4' }}>
-                  An existing ticket <strong>"{topMatch.title}"</strong> ({Math.round(topMatch.confidenceScore * 100)}% match) was found nearby. Suggestions are recommendations, not confirmed duplicates. You can review candidates on the Review step or continue submitting.
+                <div style={{ fontSize: '12px', color: '#0f172a', fontWeight: '600', marginBottom: '4px' }}>
+                  "{topMatch.title}"
+                </div>
+                <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b', marginBottom: '6px', flexWrap: 'wrap' }}>
+                  <span>Status: <strong style={{ textTransform: 'capitalize' }}>{topMatch.status || 'Reported'}</strong></span>
+                  <span>•</span>
+                  <span>Category: {topMatch.category || topMatch.department || 'Civic'}</span>
+                  {topMatch.issueId && (
+                    <>
+                      <span>•</span>
+                      <a href={`/issues/${topMatch.issueId}`} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: '600', textDecoration: 'none' }}>
+                        View Ticket &rarr;
+                      </a>
+                    </>
+                  )}
+                </div>
+                {topMatch.matchingConcepts && topMatch.matchingConcepts.length > 0 && (
+                  <div style={{ fontSize: '11px', color: '#1e40af', marginBottom: '3px' }}>
+                    <strong>Why it appears related:</strong> {topMatch.matchingConcepts.slice(0, 3).join(', ')}
+                  </div>
+                )}
+                {topMatch.contradictingConcepts && topMatch.contradictingConcepts.length > 0 && (
+                  <div style={{ fontSize: '11px', color: '#991b1b', marginBottom: '3px' }}>
+                    <strong>Differences:</strong> {topMatch.contradictingConcepts.slice(0, 2).join(', ')}
+                  </div>
+                )}
+                <div style={{ fontSize: '11px', color: '#b45309', marginTop: '6px' }}>
+                  Suggestions are recommendations, not confirmed duplicates. You may continue to submit your report.
                 </div>
               </div>
             </div>

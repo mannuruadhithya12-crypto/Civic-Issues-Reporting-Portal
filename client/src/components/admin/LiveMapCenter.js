@@ -99,7 +99,7 @@ const LiveMapCenter = ({ onRefreshParent }) => {
 
     // Export handler
     const handleExport = () => {
-        window.open(`http://localhost:5000/api/admin/command-center/export?format=csv`, '_blank');
+        window.open(`/api/admin/command-center/export?format=csv`, '_blank');
     };
 
     // Format relative timestamp helper
@@ -114,13 +114,13 @@ const LiveMapCenter = ({ onRefreshParent }) => {
         return `${Math.floor(hours / 24)} d ago`;
     };
 
-    // Derived values
+    // Derived values (honest zero defaults, no fabricated KPIs)
     const kpis = summary?.kpis || {
-        totalIssues: { value: 248, trend: 12, sparkline: [190, 200, 215, 225, 235, 240, 248] },
-        highPriority: { value: 36, trend: 8, sparkline: [26, 28, 30, 32, 34, 35, 36] },
-        resolved: { value: 182, trend: 25, sparkline: [130, 145, 160, 170, 175, 180, 182] },
-        activeWorkers: { value: 78, trend: 5, sparkline: [72, 73, 75, 76, 77, 78, 78] },
-        slaAtRisk: { value: 28, trend: -18, sparkline: [38, 35, 32, 30, 29, 28, 28] }
+        totalIssues: { value: 0, trend: 0, sparkline: [] },
+        highPriority: { value: 0, trend: 0, sparkline: [] },
+        resolved: { value: 0, trend: 0, sparkline: [] },
+        activeWorkers: { value: 0, trend: 0, sparkline: [] },
+        slaAtRisk: { value: 0, trend: 0, sparkline: [] }
     };
 
     const markersList = summary?.markers || [];

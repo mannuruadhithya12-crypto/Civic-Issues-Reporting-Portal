@@ -37,6 +37,12 @@ function GeographicAnalysis({ intelligence }) {
   const [error, setError] = useState(null);
   const [selectedHotspot, setSelectedHotspot] = useState(null);
 
+  // Gemini AI Hotspot Explanation state
+  const [explanationData, setExplanationData] = useState(null);
+  const [explaining, setExplaining] = useState(false);
+  const [explainError, setExplainError] = useState(null);
+  const [cooldown, setCooldown] = useState(0);
+
   // Map view state
   const [mapZoom, setMapZoom] = useState(13);
 
@@ -89,6 +95,60 @@ function GeographicAnalysis({ intelligence }) {
   useEffect(() => {
     fetchHotspots();
   }, [fetchHotspots]);
+
+  // Invalidate explanation when selected hotspot or filter parameters change
+  useEffect(() => {
+    setExplanationData(null);
+    setExplainError(null);
+  }, [selectedHotspot?.id, radiusMeters, minPoints, department, priority, status, timeRange]);
+
+  // Cooldown countdown timer
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  const handleExplainHotspot = async (forceRefresh = false) => {
+    if (!selectedHotspot || explaining || (cooldown > 0 && !forceRefresh)) return;
+    setExplaining(true);
+    setExplainError(null);
+
+    try {
+      const payload = {
+        radiusMeters,
+        minPoints,
+        department: department !== 'all' ? department : undefined,
+        priority: priority !== 'all' ? priority : undefined,
+        status: status !== 'all' ? status : undefined,
+        forceRefresh
+      };
+
+      if (timeRange === '7d') {
+        const d = new Date(); d.setDate(d.getDate() - 7); payload.from = d.toISOString();
+      } else if (timeRange === '30d') {
+        const d = new Date(); d.setDate(d.getDate() - 30); payload.from = d.toISOString();
+      } else if (timeRange === '90d') {
+        const d = new Date(); d.setDate(d.getDate() - 90); payload.from = d.toISOString();
+      }
+
+      const res = await api.post(`/admin/intelligence/hotspots/${selectedHotspot.id}/explain`, payload);
+      if (res.data && res.data.explanation) {
+        setExplanationData(res.data);
+      } else if (res.data?.message) {
+        setExplainError(res.data.message);
+      }
+      setCooldown(8); // 8s cooldown before next regeneration
+    } catch (err) {
+      console.error('Failed to explain hotspot:', err);
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to explain hotspot';
+      setExplainError(msg);
+    } finally {
+      setExplaining(false);
+    }
+  };
 
   const hotspots = useMemo(() => data?.hotspots || [], [data]);
   const summary = useMemo(() => data?.summary || { totalHotspots: 0, totalIssuesInHotspots: 0, totalPointsAnalyzed: 0 }, [data]);
@@ -495,6 +555,7 @@ function GeographicAnalysis({ intelligence }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           {selectedHotspot ? (
+            <>
             <Card data-testid="hotspot-detail-panel" style={{ padding: '20px' }}>
               {/* Detail Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: '14px', marginBottom: '14px' }}>
@@ -638,6 +699,181 @@ function GeographicAnalysis({ intelligence }) {
                 </div>
               )}
             </Card>
+
+            {/* AI Hotspot Explanation Card */}
+            <Card data-testid="hotspot-ai-explanation-panel" style={{ padding: '20px', border: '1.5px solid #e0e7ff', background: '#fafbff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '800', background: '#e0e7ff', color: '#3730a3', padding: '3px 10px', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      ✨ Gemini AI • Hotspot Intelligence
+                    </span>
+                    {explanationData?.cached && (
+                      <span style={{ fontSize: '10px', fontWeight: '700', background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: '6px' }}>
+                        Cached
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    data-testid="explain-hotspot-btn"
+                    onClick={() => handleExplainHotspot(Boolean(explanationData))}
+                    disabled={explaining || cooldown > 0}
+                    style={{
+                      backgroundColor: explaining || cooldown > 0 ? '#94a3b8' : '#4f46e5',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: explaining || cooldown > 0 ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'background-color 0.2s'
+                    }}
+                  >
+                    {explaining ? (
+                      <>
+                        <span style={{ display: 'inline-block', width: '10px', height: '10px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                        Analyzing Hotspot...
+                      </>
+                    ) : explanationData ? (
+                      cooldown > 0 ? `Regenerate (${cooldown}s)` : 'Regenerate Analysis'
+                    ) : (
+                      '✨ Generate AI Explanation'
+                    )}
+                  </button>
+                </div>
+
+                {explainError && (
+                  <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', fontSize: '12px', color: '#991b1b', marginBottom: '12px' }}>
+                    {explainError}
+                  </div>
+                )}
+
+                {explaining && !explanationData && (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                    <div style={{ display: 'inline-block', width: '20px', height: '20px', border: '2.5px solid #4f46e5', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '8px' }} />
+                    <div>Synthesizing geospatial density patterns and municipal history...</div>
+                  </div>
+                )}
+
+                {!explaining && !explanationData && !explainError && (
+                  <div style={{ padding: '18px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
+                    Click <strong>Generate AI Explanation</strong> to interpret observed patterns, hypotheses, and recommended investigations for this hotspot.
+                  </div>
+                )}
+
+                {explanationData && explanationData.explanation && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {/* Summary */}
+                    <div style={{ background: '#ffffff', padding: '12px 14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        Executive Summary
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#0f172a', lineHeight: '1.5', fontWeight: '500' }}>
+                        {explanationData.explanation.summary}
+                      </div>
+                    </div>
+
+                    {/* Observed Patterns & Recurring Problems */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+                      {explanationData.explanation.observedPatterns?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                            Observed Patterns
+                          </div>
+                          <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#334155', lineHeight: '1.5' }}>
+                            {explanationData.explanation.observedPatterns.map((pat, i) => (
+                              <li key={i}>{pat}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {explanationData.explanation.recurringProblems?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                            Recurring Problems
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            {explanationData.explanation.recurringProblems.map((prob, i) => (
+                              <span key={i} style={{ fontSize: '11px', background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '6px', fontWeight: '600' }}>
+                                {prob}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Possible Causes (Clearly Labelled Hypotheses) */}
+                    {explanationData.explanation.possibleCauses?.length > 0 && (
+                      <div style={{ background: '#fffbeb', border: '1px solid #fef08a', padding: '12px 14px', borderRadius: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#92400e', textTransform: 'uppercase' }}>
+                            Possible Causes (Hypotheses)
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#b45309', marginBottom: '8px' }}>
+                          ⚠️ Hypotheses require field inspection before municipal attribution.
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#78350f', lineHeight: '1.5' }}>
+                          {explanationData.explanation.possibleCauses.map((cause, i) => (
+                            <li key={i}>
+                              <strong>{cause.startsWith('Hypothesis:') ? cause : `Hypothesis: ${cause}`}</strong>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Recommended Investigations */}
+                    {explanationData.explanation.recommendedInvestigations?.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                          Recommended Investigations
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#334155', lineHeight: '1.5' }}>
+                          {explanationData.explanation.recommendedInvestigations.map((inv, i) => (
+                            <li key={i}>{inv}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Suggested Interventions */}
+                    {explanationData.explanation.suggestedInterventions?.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                          Suggested Interventions
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#334155', lineHeight: '1.5' }}>
+                          {explanationData.explanation.suggestedInterventions.map((inte, i) => (
+                            <li key={i}>{inte}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Footer: Data Limitations & Metadata */}
+                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '10px', fontSize: '11px', color: '#64748b' }}>
+                      {explanationData.explanation.dataLimitations?.length > 0 && (
+                        <div style={{ marginBottom: '6px' }}>
+                          <strong>Data Limitations:</strong> {explanationData.explanation.dataLimitations.join('; ')}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', color: '#94a3b8', fontSize: '10px' }}>
+                        <span>Model: {explanationData.modelVersion || explanationData.model}</span>
+                        <span>Generated: {new Date(explanationData.generatedAt).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </>
           ) : (
             <Card style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
               Select a cluster on the map to inspect density metrics.

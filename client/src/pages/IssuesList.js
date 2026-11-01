@@ -428,7 +428,7 @@ function IssuesList() {
                       <div className="issue-cell-thumb">
                         {issue.images && issue.images.length > 0 ? (
                           <img 
-                            src={issue.images[0].startsWith('http') ? issue.images[0] : `http://localhost:5000${issue.images[0].startsWith('/') ? '' : '/'}${issue.images[0]}`} 
+                            src={issue.images[0].startsWith('http') ? issue.images[0] : `${issue.images[0].startsWith('/') ? '' : '/'}${issue.images[0]}`} 
                             alt={issue.title} 
                           />
                         ) : (

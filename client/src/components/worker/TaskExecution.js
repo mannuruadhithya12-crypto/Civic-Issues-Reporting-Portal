@@ -66,7 +66,7 @@ const TaskExecution = ({ issue, isOpen, onClose, onSuccess }) => {
                             {issue.images.map((img, idx) => (
                                 <img 
                                     key={idx} 
-                                    src={img.startsWith('http') ? img : `http://localhost:5000${img}`} 
+                                    src={img.startsWith('http') ? img : (img.startsWith('/') ? img : `/${img}`)} 
                                     alt="Before evidence" 
                                     className="h-24 w-24 object-cover rounded-md border border-light shrink-0" 
                                 />
